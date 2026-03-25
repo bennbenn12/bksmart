@@ -347,6 +347,8 @@ $$ LANGUAGE sql SECURITY DEFINER STABLE;
 
 -- Users
 CREATE POLICY "users_self"         ON users FOR SELECT USING (auth_id = auth.uid());
+CREATE POLICY "users_insert"       ON users FOR INSERT WITH CHECK (auth_id = auth.uid());
+CREATE POLICY "users_update"       ON users FOR UPDATE USING (auth_id = auth.uid());
 CREATE POLICY "users_staff_read"   ON users FOR SELECT USING (current_user_role() IN ('bookstore_manager','bookstore_staff'));
 CREATE POLICY "users_manager_all"  ON users FOR ALL    USING (current_user_role() = 'bookstore_manager');
 
