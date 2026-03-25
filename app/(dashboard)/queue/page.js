@@ -84,8 +84,8 @@ export default function QueuePage() {
   }
 
   const processing = queue.find(q=>q.status==='Processing')
-  const waiting    = queue.filter(q=>q.status==='Waiting').sort((a,b)=>a.queue_number-b.queue_number)
-  const completed  = queue.filter(q=>q.status==='Completed')
+  const waiting    = queue.filter(q=>q.status==='Waiting').sort((a,b)=>a.queue_number-b.queue_number).slice(0, 50)
+  const completed  = queue.filter(q=>q.status==='Completed').slice(0, 20)
   const myEntry    = !isStaff ? queue.find(q=>q.user_id===profile?.user_id) : null
   const myPos      = myEntry ? waiting.findIndex(q=>q.queue_id===myEntry.queue_id)+1 : 0
 

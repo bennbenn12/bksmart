@@ -24,6 +24,7 @@ export default function ProductReviews({ itemId }) {
       .select('*, user:user_id(first_name, last_name, role_id)')
       .eq('item_id', itemId)
       .order('created_at', { ascending: false })
+      .limit(50)
     
     setReviews(data || [])
     setLoading(false)

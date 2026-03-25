@@ -12,6 +12,7 @@ export default async function SearchPage({ searchParams }) {
     .select('*')
     .ilike('name', `%${query}%`)
     .eq('is_active', true)
+    .limit(50)
 
   return (
     <div>

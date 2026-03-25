@@ -32,7 +32,18 @@ export default function AppointmentsPage() {
     if (!isStaff) q = q.eq('user_id', profile?.user_id)
     if (statusFilter) q = q.eq('status', statusFilter)
     const { data } = await q
-    setAppts(data||[]); setLoading(false)
+
+    let finalData = data || []
+    if (search && isStaff) {
+      const s = search.toLowerCase()
+      finalData = finalData.filter(a => 
+        a.user?.first_name?.toLowerCase().includes(s) || 
+        a.user?.last_name?.toLowerCase().includes(s) ||
+        a.user?.student_id?.toLowerCase().includes(s)
+      )
+    }
+
+    setAppts(finalData); setLoading(false)
   }, [profile, isStaff, statusFilter, search])
 
   useRealtime({ tables:['appointments','appointment_slots'], onRefresh:fetchAppts, enabled:!!profile })
@@ -47,8 +58,8 @@ export default function AppointmentsPage() {
   }
 
   const today = new Date().toISOString().split('T')[0]
-  const upcoming = appts.filter(a => a.schedule_date >= today && a.status !== 'Completed')
-  const past = appts.filter(a => a.schedule_date < today || a.status === 'Completed')
+  const upcoming = appts.filter(a => a.schedule_date >= today && a.status !== 'Completed').slice(0, 50)
+  const past = appts.filter(a => a.schedule_date < today || a.status === 'Completed').slice(0, 20)
 
   return (
     <div className="page-enter">

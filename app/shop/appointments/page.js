@@ -29,8 +29,8 @@ export default function MyAppointmentsPage() {
   useEffect(() => { if (profile) fetchAppts() }, [profile])
 
   const today = new Date().toISOString().split('T')[0]
-  const upcoming = appts.filter(a=>a.schedule_date>=today&&a.status!=='Completed')
-  const past     = appts.filter(a=>a.schedule_date<today||a.status==='Completed')
+  const upcoming = appts.filter(a=>a.schedule_date>=today&&a.status!=='Completed').slice(0, 50)
+  const past     = appts.filter(a=>a.schedule_date<today||a.status==='Completed').slice(0, 20)
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">

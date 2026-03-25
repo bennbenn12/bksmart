@@ -29,7 +29,7 @@ export default function DashboardPage() {
         supabase.from('queues').select('queue_id,status,queue_number,user_id,user:user_id(first_name,last_name)').eq('queue_date',today).order('queue_number'),
         supabase.from('payments').select('payment_id,amount').is('verified_at',null),
         supabase.from('job_orders').select('job_id,status').eq('status','Pending_Audit'),
-        supabase.from('feedback').select('rating').not('rating','is',null),
+        supabase.from('feedback').select('rating').not('rating','is',null).order('created_at', {ascending: false}).limit(500),
       ])
       const avgRating = feedback.data?.length ? (feedback.data.reduce((s,f)=>s+(f.rating||0),0)/feedback.data.length).toFixed(1) : '—'
       setStats({

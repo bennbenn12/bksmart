@@ -52,7 +52,7 @@ export default function FeedbackPage() {
   }, [profile, isManager, ratingFilter, page])
 
   async function fetchAvg() {
-    const { data } = await supabase.from('feedback').select('rating').not('rating','is',null)
+    const { data } = await supabase.from('feedback').select('rating').not('rating','is',null).order('created_at', {ascending: false}).limit(500)
     if (data?.length) setAvgRating((data.reduce((s,f)=>s+(f.rating||0),0)/data.length).toFixed(1))
   }
 

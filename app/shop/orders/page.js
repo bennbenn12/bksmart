@@ -15,6 +15,7 @@ export default async function MyOrdersPage() {
     .select('*, order_items(order_item_id,quantity,unit_price,bookstore_items(name,image_url,category))')
     .eq('user_id', profile.user_id)
     .order('created_at',{ascending:false})
+    .limit(50)
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">

@@ -26,6 +26,7 @@ export default async function CategoryPage({ params }) {
     .select('*')
     .eq('category', dbCategory)
     .eq('is_active', true)
+    .limit(100)
 
   return (
     <div>
