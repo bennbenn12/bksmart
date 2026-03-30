@@ -13,22 +13,32 @@
 npm install
 ```
 
-### 2. Create Supabase Project
-1. Go to [supabase.com](https://supabase.com) → New Project
-2. SQL Editor → paste **entire** `supabase/schema.sql` → Run
+### 2. Start MySQL (XAMPP)
+1. Open XAMPP Control Panel
+2. Start **MySQL**
+3. Ensure port is `3306` (or update `.env.local`)
 
-### 3. Configure
+### 3. Create Database Schema
+Run the SQL file in phpMyAdmin SQL tab (or MySQL CLI):
+```sql
+SOURCE mysql/schema.sql;
+```
+
+### 4. Configure
 ```bash
 cp .env.local.example .env.local
 ```
-Fill in from Supabase Settings → API:
+Set database credentials:
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_ROLE_KEY=eyJ...
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=booksmart
+AUTH_JWT_SECRET=replace-with-strong-secret
 ```
 
-### 4. Run
+### 5. Run
 ```bash
 npm run dev   # http://localhost:3000
 ```
@@ -64,12 +74,12 @@ npm run dev   # http://localhost:3000
 
 ### 3. Manage Queue `/queue` ✨ NEW
 *(Table 7: Queues — queue_id, user_id, queue_number, status: Waiting/Processing/Completed)*
-- Real-time queue board with live number display
+- Near real-time queue board with periodic refresh
 - "Now Serving" large display panel
 - Call Next / Complete actions for staff
 - Students can join queue, link to orders
 - Auto-assigned queue numbers per day via trigger
-- Supabase Realtime updates
+- Polling-based updates (MySQL mode)
 
 ### 4. Manage Appointments `/appointments`
 *(Table 6: Appointments — Confirmed/Completed/Rescheduled)*
@@ -145,7 +155,7 @@ npm run dev   # http://localhost:3000
 ## 📁 Project Structure
 
 ```
-booksmart/
+caps-mysql/
 ├── app/
 │   ├── (auth)/            # Login, Register
 │   ├── (dashboard)/       # Protected pages
@@ -164,19 +174,30 @@ booksmart/
 │   ├── providers/         # AuthProvider
 │   └── ui/                # Shared components
 ├── lib/
-│   ├── supabase/          # client.js, server.js
+│   ├── mysql/             # db, auth, session, SQL compat layer
+│   ├── supabase/          # compatibility wrappers used by pages
 │   └── utils.js           # Roles, colors, formatters
-├── middleware.js           # Auth protection
-└── supabase/
-    └── schema.sql          # All 10 tables + RLS
+├── app/api/mysql/         # MySQL query + auth endpoints
+├── middleware.js          # Cookie-based auth protection
+└── mysql/
+    └── schema.sql         # MySQL schema + triggers
 ```
 
 ---
 
 ## 🛠 Tech Stack
-- **Next.js 14** (App Router)
-- **Supabase** (PostgreSQL, Auth, Realtime, RLS)  
+- **Next.js 16** (App Router)
+- **MySQL / MariaDB** (XAMPP)
+- **Custom JWT session auth** (HTTP-only cookie)
 - **Tailwind CSS v3**
 - **Recharts** (charts)
 - **Lucide React** (icons)
 - **Playfair Display + Plus Jakarta Sans** (fonts)
+
+---
+
+## ⚠️ Notes for MySQL Mode
+- Current compatibility layer supports common query methods used by pages (`select`, `insert`, `update`, `delete`, `eq`, `in`, `ilike`, `order`, `range`, `single`, `rpc`).
+- Pages previously relying on Supabase Realtime now refresh on interval.
+- Build requires reachable MySQL server because server pages fetch data during prerender.
+# mysql-booksmart
