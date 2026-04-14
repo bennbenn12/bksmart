@@ -1,7 +1,11 @@
 /** @type {import('next').NextConfig} */
 module.exports = {
+  onDemandEntries: {
+    maxInactiveAge: 60 * 60 * 1000,
+    pagesBufferLength: 10,
+  },
   images: {
-    remotePatterns: [{ protocol: 'https', hostname: '*.supabase.co' }]
+    remotePatterns: []
   },
   // Compress responses
   compress: true,

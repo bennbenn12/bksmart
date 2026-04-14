@@ -1,6 +1,7 @@
 'use client'
 import { cn } from '@/lib/utils'
 import { X, AlertCircle, CheckCircle2, Info, AlertTriangle } from 'lucide-react'
+import { usePathname } from 'next/navigation'
 
 export function Badge({ children, className }) {
   return <span className={cn('badge', className)}>{children}</span>
@@ -23,17 +24,22 @@ export function StatsCard({ label, value, icon: Icon, sub, color='brand' }) {
 }
 
 export function Modal({ open, onClose, title, children, size='md' }) {
+  const pathname = usePathname()
   if (!open) return null
   const sizes = { sm:'max-w-sm', md:'max-w-lg', lg:'max-w-2xl', xl:'max-w-4xl' }
+  const dashboardPaths = ['/dashboard','/accounts','/appointments','/feedback','/inventory','/job-orders','/notifications','/orders','/payments','/queue','/reports']
+  const inDashboard = dashboardPaths.some(p => pathname === p || pathname?.startsWith(`${p}/`))
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className={cn('relative bg-white rounded-xl shadow-modal w-full max-h-[90vh] flex flex-col', sizes[size])}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
-          <h2 className="section-title">{title}</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><X size={16} /></button>
+    <div className={cn('fixed inset-0 z-50 overflow-y-auto', inDashboard && 'md:pl-56')}>
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div className={cn('relative bg-white rounded-xl shadow-modal w-full max-h-[85vh] flex flex-col', sizes[size])}>
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
+            <h2 className="section-title">{title}</h2>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><X size={16} /></button>
+          </div>
+          <div className="px-6 py-5 overflow-y-auto flex-1 min-h-0">{children}</div>
         </div>
-        <div className="px-6 py-5 overflow-y-auto">{children}</div>
       </div>
     </div>
   )

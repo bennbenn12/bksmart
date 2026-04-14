@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/db/client'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { Star, Send, User, Loader2 } from 'lucide-react'
 import { formatDateTime, cn } from '@/lib/utils'
@@ -21,7 +21,7 @@ export default function ProductReviews({ itemId }) {
   async function fetchReviews() {
     const { data } = await supabase
       .from('feedback')
-      .select('*, user:user_id(first_name, last_name, role_id)')
+      .select('*, user:user_id(first_name, last_name, role_type)')
       .eq('item_id', itemId)
       .order('created_at', { ascending: false })
       .limit(50)
@@ -37,7 +37,7 @@ export default function ProductReviews({ itemId }) {
     setSubmitting(true)
     const { error } = await supabase.from('feedback').insert({
       item_id: itemId,
-      user_id: profile.user_id,
+      user_id: profile.id_number,
       rating,
       content: comment,
       // order_id is optional here, we're reviewing the item directly
@@ -127,7 +127,7 @@ export default function ProductReviews({ itemId }) {
                     <p className="text-sm font-semibold text-slate-800">
                       {review.user?.first_name} {review.user?.last_name}
                       <span className="text-xs font-normal text-slate-400 ml-2 capitalize">
-                        ({review.user?.role_id?.replace('_', ' ')})
+                        ({review.user?.role_type?.replace('_', ' ')})
                       </span>
                     </p>
                     <div className="flex text-yellow-400">

@@ -32,7 +32,7 @@ CREATE TYPE user_role AS ENUM (
 -- ================================================================
 CREATE TABLE users (
   user_id        UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  role_id        user_role NOT NULL DEFAULT 'student',
+  role_type        user_role NOT NULL DEFAULT 'student',
   username       VARCHAR(100) UNIQUE NOT NULL,
   password_hash  VARCHAR(255) NOT NULL,           -- handled by Supabase Auth
   first_name     VARCHAR(100) NOT NULL,
@@ -337,7 +337,7 @@ ALTER TABLE inventory_logs   ENABLE ROW LEVEL SECURITY;
 -- Helper: get current user's role from users table
 CREATE OR REPLACE FUNCTION current_user_role()
 RETURNS user_role AS $$
-  SELECT role_id FROM users WHERE auth_id = auth.uid();
+  SELECT role_type FROM users WHERE auth_id = auth.uid();
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
 
 CREATE OR REPLACE FUNCTION current_user_id()

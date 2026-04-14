@@ -2,22 +2,32 @@
 import { useEffect, useState, useCallback } from 'react'
 import Header from '@/components/layout/Header'
 import { StatsCard, LoadingSpinner } from '@/components/ui'
-import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/db/client'
 import { useRealtime } from '@/lib/useRealtime'
 import { formatCurrency, cn } from '@/lib/utils'
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts'
-import { BarChart3, RefreshCw, ShoppingCart, CreditCard, Package, Star, AlertTriangle, Printer } from 'lucide-react'
+import { BarChart3, RefreshCw, ShoppingCart, CreditCard, Package, Star, AlertTriangle, Printer, FileDown } from 'lucide-react'
 
 const COLORS = ['#3358e8','#16a34a','#f59e0b','#dc2626','#7c3aed','#0891b2','#84cc16']
+
+const REPORT_TYPES = [
+  { value:'all', label:'All Reports' },
+  { value:'sales', label:'Sales & Revenue' },
+  { value:'inventory', label:'Inventory Status' },
+  { value:'orders', label:'Orders & Job Orders' },
+  { value:'feedback', label:'Feedback & Ratings' },
+]
 
 export default function ReportsPage() {
   const [loading, setLoading]   = useState(true)
   const [from, setFrom]         = useState(new Date(Date.now()-86400000*30).toISOString().split('T')[0])
   const [to, setTo]             = useState(new Date().toISOString().split('T')[0])
   const [data, setData]         = useState({ orders:[], payments:[], inventory:[], feedback:[], jobOrders:[] })
+  const [reportType, setReportType] = useState('all')
+  const [showDownloadPicker, setShowDownloadPicker] = useState(false)
   const supabase = createClient()
 
   const load = useCallback(async () => {
@@ -37,14 +47,14 @@ export default function ReportsPage() {
   useEffect(() => { load() }, [from, to])
 
   // Computed
-  const totalRevenue = data.payments.reduce((s,p)=>s+(p.amount||0),0)
-  const avgRating    = data.feedback.length ? (data.feedback.reduce((s,f)=>s+(f.rating||0),0)/data.feedback.length).toFixed(1) : '—'
-  const lowStock     = data.inventory.filter(i=>i.stock_quantity<=i.reorder_level)
+  const totalRevenue = data.payments.reduce((s,p)=>s+parseFloat(p.amount||0),0)
+  const avgRating    = data.feedback.length ? (data.feedback.reduce((s,f)=>s+parseFloat(f.rating||0),0)/data.feedback.length).toFixed(1) : '—'
+  const lowStock     = data.inventory.filter(i=>parseInt(i.stock_quantity)<=parseInt(i.reorder_level))
 
   // Daily revenue chart
   const revenueByDay = data.payments.reduce((acc,p)=>{
     const d = p.date_paid?.slice(0,10); if(!d) return acc
-    acc[d] = (acc[d]||0)+(p.amount||0); return acc
+    acc[d] = (acc[d]||0)+parseFloat(p.amount||0); return acc
   },{})
   const revenueChart = Object.entries(revenueByDay).sort(([a],[b])=>a.localeCompare(b)).map(([date,amount])=>({ date:date.slice(5), amount }))
 
@@ -53,11 +63,11 @@ export default function ReportsPage() {
   const statusChart = Object.entries(byStatus).map(([name,value])=>({name,value}))
 
   // Payment source breakdown
-  const bySource = data.payments.reduce((acc,p)=>{ acc[p.payment_source]=(acc[p.payment_source]||0)+(p.amount||0); return acc },{})
+  const bySource = data.payments.reduce((acc,p)=>{ acc[p.payment_source]=(acc[p.payment_source]||0)+parseFloat(p.amount||0); return acc },{})
   const sourceChart = Object.entries(bySource).map(([name,value])=>({name,value:Math.round(value*100)/100}))
 
   // Stock by shop
-  const byShop = data.inventory.reduce((acc,i)=>{ acc[i.shop]=(acc[i.shop]||0)+i.stock_quantity; return acc },{})
+  const byShop = data.inventory.reduce((acc,i)=>{ acc[i.shop]=(acc[i.shop]||0)+parseInt(i.stock_quantity||0); return acc },{})
   const shopChart = Object.entries(byShop).map(([shop,qty])=>({shop:shop.replace('_',' '),qty}))
 
   // Job orders by dept
@@ -68,10 +78,6 @@ export default function ReportsPage() {
     <div className="page-enter">
       <Header title="Reports & Analytics"/>
       <div className="p-6 space-y-6">
-        <div className="flex items-center gap-2 text-xs text-green-600 font-semibold">
-          <span className="live-dot"/> Live — auto-refreshes on new data
-        </div>
-
         {/* Date range */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-2 shadow-sm">
@@ -82,7 +88,29 @@ export default function ReportsPage() {
             <input type="date" className="text-sm text-slate-700 focus:outline-none" value={to} onChange={e=>setTo(e.target.value)}/>
           </div>
           <button onClick={load} className="btn-ghost gap-1 text-xs"><RefreshCw size={12}/> Refresh</button>
-          <button onClick={()=>window.print()} className="btn-secondary gap-1 text-xs ml-auto no-print"><Printer size={12}/> Print Report</button>
+          
+          <div className="flex items-center gap-2 ml-auto no-print">
+            <select className="input text-xs py-1.5 h-8" value={reportType} onChange={e=>setReportType(e.target.value)}>
+              {REPORT_TYPES.map(r=><option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+            <div className="relative">
+              <button onClick={()=>setShowDownloadPicker(!showDownloadPicker)} className="btn-secondary gap-1 text-xs"><FileDown size={12}/> Download PDF</button>
+              {showDownloadPicker && (
+                <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-xl shadow-lg border border-slate-200 z-50 py-1">
+                  <p className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Select report to download</p>
+                  {REPORT_TYPES.map(r=>(
+                    <button key={r.value} onClick={()=>{
+                      setReportType(r.value);
+                      setShowDownloadPicker(false);
+                      setTimeout(()=>window.print(), 100);
+                    }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 text-slate-700 flex items-center gap-2">
+                      <Printer size={12} className="text-slate-400"/>{r.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {loading ? <LoadingSpinner/> : (
@@ -96,7 +124,7 @@ export default function ReportsPage() {
             </div>
 
             {/* Revenue chart */}
-            {revenueChart.length > 0 && (
+            {revenueChart.length > 0 && (reportType === 'all' || reportType === 'sales') && (
               <div className="card p-5">
                 <h3 className="section-title mb-4 flex items-center gap-2"><BarChart3 size={16} className="text-brand-600"/> Daily Revenue (₱)</h3>
                 <ResponsiveContainer width="100%" height={220}>
@@ -113,7 +141,7 @@ export default function ReportsPage() {
 
             <div className="grid md:grid-cols-2 gap-6">
               {/* Orders by status */}
-              {statusChart.length > 0 && (
+              {statusChart.length > 0 && (reportType === 'all' || reportType === 'orders') && (
                 <div className="card p-5">
                   <h3 className="section-title mb-4">Orders by Status</h3>
                   <ResponsiveContainer width="100%" height={200}>
@@ -128,7 +156,7 @@ export default function ReportsPage() {
               )}
 
               {/* Payment source */}
-              {sourceChart.length > 0 && (
+              {sourceChart.length > 0 && (reportType === 'all' || reportType === 'sales') && (
                 <div className="card p-5">
                   <h3 className="section-title mb-4">Revenue by Payment Source</h3>
                   <ResponsiveContainer width="100%" height={200}>
@@ -143,7 +171,7 @@ export default function ReportsPage() {
               )}
 
               {/* Stock by shop */}
-              {shopChart.length > 0 && (
+              {shopChart.length > 0 && (reportType === 'all' || reportType === 'inventory') && (
                 <div className="card p-5">
                   <h3 className="section-title mb-4">Stock by Shop</h3>
                   <ResponsiveContainer width="100%" height={180}>
@@ -159,7 +187,7 @@ export default function ReportsPage() {
               )}
 
               {/* Job orders by dept */}
-              {deptChart.length > 0 && (
+              {deptChart.length > 0 && (reportType === 'all' || reportType === 'orders') && (
                 <div className="card p-5">
                   <h3 className="section-title mb-4">Job Orders by Department</h3>
                   <ResponsiveContainer width="100%" height={180}>
@@ -176,7 +204,7 @@ export default function ReportsPage() {
             </div>
 
             {/* Low stock table */}
-            {lowStock.length > 0 && (
+            {lowStock.length > 0 && (reportType === 'all' || reportType === 'inventory') && (
               <div className="card overflow-hidden">
                 <div className="px-5 py-3 bg-red-50 border-b border-red-100 flex items-center gap-2">
                   <AlertTriangle size={14} className="text-red-600"/><h3 className="section-title text-red-700">Low Stock Alert ({lowStock.length} items)</h3>

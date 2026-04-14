@@ -1,9 +1,8 @@
 'use client'
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/db/client'
 import { Loader2, CheckCircle, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 
 const SELF_ROLES = [
   { value: 'student', label: 'Student' },
@@ -14,13 +13,12 @@ const SELF_ROLES = [
 export default function RegisterPage() {
   const [form, setForm] = useState({ 
     first_name:'', last_name:'', email:'', password:'', 
-    role: 'student', student_id: '', contact_number: '', department: '' 
+    role: 'student', id_number: '', id_type: 'Student ID', contact_number: '', department: '' 
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const supabase = createClient()
-  const router = useRouter()
 
   const updateForm = (key, value) => {
     setForm(prev => ({ ...prev, [key]: value }))
@@ -32,7 +30,6 @@ export default function RegisterPage() {
     setError('')
 
     try {
-      // 1. Sign up with Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: form.email,
         password: form.password,
@@ -40,7 +37,11 @@ export default function RegisterPage() {
           data: {
             first_name: form.first_name,
             last_name: form.last_name,
-            role: form.role
+            role: form.role,
+            id_number: form.id_number || null,
+            id_type: form.id_type || null,
+            contact_number: form.contact_number || null,
+            department: form.role === 'teacher' ? form.department : null,
           }
         }
       })
@@ -48,29 +49,6 @@ export default function RegisterPage() {
       if (authError) throw authError
 
       if (authData.user) {
-        // 2. Create User Profile in public.users table
-        const { error: profileError } = await supabase
-          .from('users')
-          .insert({
-            auth_id: authData.user.id,
-            email: form.email,
-            username: form.email.split('@')[0], // Simple username generation
-            first_name: form.first_name,
-            last_name: form.last_name,
-            role_id: form.role,
-            password_hash: 'managed_by_supabase',
-            student_id: form.role === 'student' ? form.student_id : null,
-            contact_number: form.contact_number || null,
-            department: form.role === 'teacher' ? form.department : null,
-            status: 'Active'
-          })
-
-        if (profileError) {
-          // If profile creation fails, we might want to cleanup auth user or show specific error
-          console.error('Profile creation failed:', profileError)
-          throw new Error('Failed to create user profile. ' + profileError.message)
-        }
-
         setSuccess(true)
       }
     } catch (err) {
@@ -214,18 +192,39 @@ export default function RegisterPage() {
             </div>
 
             {/* Role Specific Fields */}
-            {form.role === 'student' && (
-              <div className="animate-fade-in">
-                <label className="label">Student ID Number</label>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">ID Type</label>
+                <select 
+                  className="input" 
+                  value={form.id_type} 
+                  onChange={e => updateForm('id_type', e.target.value)}
+                >
+                  {form.role === 'student' && <option value="Student ID">Student ID</option>}
+                  {form.role === 'teacher' && <option value="Employee ID">Employee ID</option>}
+                  {form.role === 'parent' && (
+                    <>
+                      <option value="Driver License">Driver License</option>
+                      <option value="National ID">National ID</option>
+                      <option value="Passport">Passport</option>
+                      <option value="Voter ID">Voter ID</option>
+                      <option value="Other">Other</option>
+                    </>
+                  )}
+                  {!['student','teacher','parent'].includes(form.role) && <option value="Employee ID">Employee ID</option>}
+                </select>
+              </div>
+              <div>
+                <label className="label">ID Number</label>
                 <input 
                   className="input" 
-                  value={form.student_id} 
-                  onChange={e => updateForm('student_id', e.target.value)} 
-                  placeholder="e.g. 2023-12345"
+                  value={form.id_number} 
+                  onChange={e => updateForm('id_number', e.target.value)} 
+                  placeholder={form.role === 'student' ? "2023-12345" : "ID Number"}
                   required
                 />
               </div>
-            )}
+            </div>
 
             {form.role === 'teacher' && (
               <div className="animate-fade-in">

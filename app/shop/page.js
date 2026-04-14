@@ -1,5 +1,6 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import Link from 'next/link'
+import ActiveOrdersPreview from './ActiveOrdersPreview'
 
 // Revalidate this page every 60 seconds — products don't change every second
 export const revalidate = 60
@@ -12,14 +13,14 @@ export default async function ShopPage() {
     supabase
       .from('bookstore_items')
       // Only select columns the UI actually uses — avoids transferring description, image_url bloat
-      .select('item_id, name, price, stock_quantity, category, shop, image_url')
+      .select('item_id, name, price, stock_quantity, reserved_quantity, category, shop, image_url')
       .eq('is_active', true)
       .gt('stock_quantity', 0)   // only show in-stock on homepage
       .order('created_at', { ascending: false })
       .limit(20),
     supabase
       .from('bookstore_items')
-      .select('item_id, name, price, stock_quantity, category, image_url')
+      .select('item_id, name, price, stock_quantity, reserved_quantity, category, image_url')
       .eq('is_active', true)
       .order('stock_quantity', { ascending: false })
       .limit(5),
@@ -30,7 +31,7 @@ export default async function ShopPage() {
     { name: 'Uniforms',      slug: 'uniforms',   icon: '👕', color: 'bg-green-50 text-green-600 border-green-100' },
     { name: 'Supplies',      slug: 'supplies',   icon: '✏️', color: 'bg-yellow-50 text-yellow-600 border-yellow-100' },
     { name: 'Souvenirs',     slug: 'souvenirs',  icon: '🎁', color: 'bg-red-50 text-red-600 border-red-100' },
-    { name: 'Riso Services', slug: 'riso',       icon: '🖨️', color: 'bg-purple-50 text-purple-600 border-purple-100' },
+    { name: 'RISO Printing', slug: 'riso',       icon: '🖨️', color: 'bg-purple-50 text-purple-600 border-purple-100', isService: true },
   ]
 
   return (
@@ -52,6 +53,9 @@ export default async function ShopPage() {
         <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-hnu-gold/10 rounded-full blur-2xl" />
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/5 rounded-full blur-2xl" />
       </div>
+
+      {/* Active Orders Preview - Shows when user has pending/ready orders */}
+      <ActiveOrdersPreview />
 
       {/* Category grid */}
       <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
@@ -102,7 +106,7 @@ export default async function ShopPage() {
                     {categories.find(c => c.name.toLowerCase().startsWith(item.category?.toLowerCase()))?.icon || '📦'}
                   </div>
                 )}
-                {item.stock_quantity === 0 && (
+                {(item.stock_quantity - (item.reserved_quantity || 0)) <= 0 && (
                   <div className="absolute inset-0 bg-white/75 flex items-center justify-center">
                     <span className="text-[10px] font-bold bg-slate-700 text-white px-2 py-0.5 rounded-full">Out of Stock</span>
                   </div>
@@ -115,9 +119,7 @@ export default async function ShopPage() {
                 </p>
                 <div className="mt-auto pt-2 flex items-center justify-between">
                   <span className="text-sm font-bold text-hnu-dark">₱{Number(item.price).toFixed(2)}</span>
-                  {item.stock_quantity <= 5 && item.stock_quantity > 0 && (
-                    <span className="text-[9px] font-bold text-orange-500">{item.stock_quantity} left</span>
-                  )}
+                  {(() => { const avail = item.stock_quantity - (item.reserved_quantity || 0); return avail <= 5 && avail > 0 ? <span className="text-[9px] font-bold text-orange-500">{avail} left</span> : null })()}
                 </div>
               </div>
             </Link>

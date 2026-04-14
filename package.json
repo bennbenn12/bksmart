@@ -3,19 +3,22 @@
   "version": "0.2.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "cross-env NODE_OPTIONS=--max-old-space-size=4096 next dev",
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint ."
   },
   "dependencies": {
-    "@supabase/ssr": "^0.8.0",
-    "@supabase/supabase-js": "^2.98.0",
     "@tailwindcss/postcss": "^4.2.1",
+    "bcryptjs": "^3.0.2",
     "clsx": "^2.1.1",
+    "cookie": "^1.0.2",
     "date-fns": "^4.1.0",
+    "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.575.0",
+    "mysql2": "^3.15.2",
     "next": "^16.1.6",
+    "nodemailer": "^8.0.5",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "recharts": "^3.7.0",
@@ -26,6 +29,9 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.27",
+    "cross-env": "^10.1.0",
+    "eslint": "^9.38.0",
+    "eslint-config-next": "^16.1.6",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.19"
   }

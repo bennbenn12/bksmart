@@ -6,19 +6,23 @@ import { getNavItems, ROLE_LABELS, ROLE_COLORS, cn } from '@/lib/utils'
 import {
   LayoutDashboard, Users, ListOrdered, CalendarDays, ShoppingCart,
   ClipboardList, CreditCard, Package, MessageSquare, BarChart3,
-  BookOpen, LogOut, ChevronLeft, ChevronRight
+  BookOpen, LogOut, ChevronLeft, ChevronRight, UserCog, Loader2, Eye, EyeOff, Printer
 } from 'lucide-react'
 import { useState } from 'react'
+import { createClient } from '@/lib/db/client'
+import { Modal, Alert } from '@/components/ui'
+import { useToast } from '@/components/providers/ToastProvider'
 
-const ICONS = { LayoutDashboard, Users, ListOrdered, CalendarDays, ShoppingCart, ClipboardList, CreditCard, Package, MessageSquare, BarChart3 }
+const ICONS = { LayoutDashboard, Users, ListOrdered, CalendarDays, ShoppingCart, ClipboardList, CreditCard, Package, MessageSquare, BarChart3, Printer }
 
 export default function Sidebar() {
-  const { profile, signOut } = useAuth()
+  const { profile, signOut, refreshProfile } = useAuth()
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
+  const [showEditProfile, setShowEditProfile] = useState(false)
 
   if (!profile) return null
-  const nav = getNavItems(profile.role_id)
+  const nav = getNavItems(profile.role_type)
 
   return (
     <aside className={cn('flex flex-col h-screen bg-brand-950 border-r border-brand-900/50 shrink-0 transition-all duration-300', collapsed ? 'w-[68px]' : 'w-56')}>
@@ -45,7 +49,7 @@ export default function Sidebar() {
             </div>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-white truncate">{profile.first_name} {profile.last_name}</p>
-              <span className={cn('badge text-[10px] mt-0.5', ROLE_COLORS[profile.role_id])}>{ROLE_LABELS[profile.role_id]}</span>
+              <span className={cn('badge text-[10px] mt-0.5', ROLE_COLORS[profile.role_type])}>{ROLE_LABELS[profile.role_type]}</span>
             </div>
           </div>
         </div>
@@ -78,6 +82,12 @@ export default function Sidebar() {
 
       {/* Bottom */}
       <div className="px-2 pb-3 pt-2 border-t border-brand-900/50 space-y-1">
+        <button onClick={() => setShowEditProfile(true)}
+          className="nav-link w-full text-brand-400 hover:text-white hover:bg-brand-800/60"
+          title={collapsed ? 'Edit Profile' : undefined}>
+          <UserCog size={17} className="shrink-0" />
+          {!collapsed && <span>Edit Profile</span>}
+        </button>
         <button onClick={() => setCollapsed(!collapsed)}
           className="nav-link w-full text-brand-400 hover:text-white hover:bg-brand-800/60"
           title={collapsed ? 'Expand' : 'Collapse'}>
@@ -89,6 +99,106 @@ export default function Sidebar() {
           {!collapsed && <span>Sign out</span>}
         </button>
       </div>
+
+      {showEditProfile && <EditProfileModal profile={profile} onClose={() => setShowEditProfile(false)} onSaved={() => { setShowEditProfile(false); refreshProfile() }} />}
     </aside>
+  )
+}
+
+function EditProfileModal({ profile, onClose, onSaved }) {
+  const toast = useToast()
+  const supabase = createClient()
+  const [form, setForm] = useState({
+    first_name: profile.first_name || '',
+    last_name: profile.last_name || '',
+    contact_number: profile.contact_number || '',
+    password: '',
+    confirm_password: ''
+  })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [showPw, setShowPw] = useState(false)
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  async function handleSave(e) {
+    e.preventDefault()
+    setError('')
+    if (form.password && form.password.length < 6) return setError('Password must be at least 6 characters.')
+    if (form.password && form.password !== form.confirm_password) return setError('Passwords do not match.')
+
+    setSaving(true)
+    try {
+      const { error: updateErr } = await supabase.from('users').update({
+        first_name: form.first_name,
+        last_name: form.last_name,
+        contact_number: form.contact_number || null,
+      }).eq('id_number', profile.id_number)
+      if (updateErr) throw updateErr
+
+      if (form.password) {
+        const { error: pwErr } = await supabase.auth.updateUser({ password: form.password })
+        if (pwErr) throw pwErr
+      }
+
+      toast('Profile updated successfully.', 'success')
+      onSaved()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal open={true} onClose={onClose} title="Edit Profile" size="sm">
+      {error && <Alert type="error" message={error} />}
+      <form onSubmit={handleSave} className="space-y-4 mt-2">
+        {/* ID Number - read only */}
+        <div className="flex items-center gap-3 p-3 bg-brand-50 border border-brand-100 rounded-xl">
+          <span className="text-xs text-brand-500 font-bold uppercase">{profile.role_type === 'parent' && profile.id_type ? profile.id_type : 'ID Number'}</span>
+          <span className="font-mono font-black text-brand-700">{profile.id_number || '—'}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">First Name</label>
+            <input className="input" value={form.first_name} onChange={e => set('first_name', e.target.value)} required />
+          </div>
+          <div>
+            <label className="label">Last Name</label>
+            <input className="input" value={form.last_name} onChange={e => set('last_name', e.target.value)} required />
+          </div>
+        </div>
+        <div>
+          <label className="label">Contact Number</label>
+          <input className="input" value={form.contact_number} onChange={e => set('contact_number', e.target.value)} placeholder="0912 345 6789" />
+        </div>
+        <div className="pt-4 border-t border-slate-100">
+          <h4 className="text-sm font-bold text-slate-700 mb-3">Change Password (Optional)</h4>
+          <div className="space-y-3">
+            <div>
+              <label className="label">New Password</label>
+              <div className="relative">
+                <input type={showPw ? 'text' : 'password'} minLength={6} className="input pr-10" value={form.password} onChange={e => set('password', e.target.value)} placeholder="Leave blank to keep current" />
+                <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+            </div>
+            {form.password && (
+              <div>
+                <label className="label">Confirm New Password</label>
+                <input type="password" minLength={6} className="input" value={form.confirm_password} onChange={e => set('confirm_password', e.target.value)} placeholder="Retype new password" required={!!form.password} />
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-4">
+          <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
+          <button type="submit" disabled={saving} className="btn-primary">
+            {saving ? <Loader2 size={16} className="animate-spin" /> : 'Save Changes'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }

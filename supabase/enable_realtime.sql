@@ -28,7 +28,6 @@ WHERE pubname = 'supabase_realtime'
 ORDER BY tablename;
 
 -- ================================================================
--- NOTE: After running this, go to your Supabase Dashboard:
---   Database → Replication → supabase_realtime
---   Confirm all tables above are listed under "Source"
+-- NOTE: This file is for Supabase only and is NOT used in MySQL.
+-- For MySQL-based real-time updates, use polling or WebSocket solutions.
 -- ================================================================

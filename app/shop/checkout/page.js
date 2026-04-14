@@ -3,10 +3,9 @@ import { useCart } from '@/components/providers/CartProvider'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { createOrder } from '../actions'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Loader2, CheckCircle, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
-import AppointmentBooking from '../appointments/AppointmentBooking'
 import TellerSlip from './TellerSlip'
 
 export default function CheckoutPage() {
@@ -17,11 +16,16 @@ export default function CheckoutPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [orderId, setOrderId] = useState(null)
-  const [realOrderId, setRealOrderId] = useState(null) // Database UUID
+  const [realOrderId, setRealOrderId] = useState(null) // MySQL UUID
   const [placedOrderTotal, setPlacedOrderTotal] = useState(0)
 
+  useEffect(() => {
+    if (cart.length === 0 && !success) {
+      router.push('/shop/cart')
+    }
+  }, [cart.length, success, router])
+
   if (cart.length === 0 && !success) {
-    router.push('/shop/cart')
     return null
   }
 
@@ -51,30 +55,50 @@ export default function CheckoutPage() {
   }
 
   if (success) {
-    if (placedOrderTotal > 100) {
+    if (placedOrderTotal >= 100) {
       return (
         <div className="max-w-2xl mx-auto min-h-[60vh] py-12 px-4">
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600">
               <CheckCircle size={32} />
             </div>
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">Order Placed!</h2>
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">Order Slip Created!</h2>
             <p className="text-slate-500 max-w-md mx-auto">
-              Since your order is above ₱100.00, please proceed to the University Teller for payment.
+              Your order slip <span className="font-mono font-bold text-slate-700">{orderId}</span> has been created. Since your total is ₱100 or above, please pay at the <strong>University Teller</strong> first.
             </p>
           </div>
 
           <TellerSlip 
-            order={{ orderNumber: orderId, totalAmount: placedOrderTotal }} 
+            order={{ order_number: orderId, total_amount: placedOrderTotal, created_at: new Date().toISOString() }} 
             user={profile} 
           />
 
-          <div className="mt-8 text-center space-y-4">
-             <AppointmentBooking orderId={realOrderId} onComplete={() => router.push(`/feedback?action=create&orderId=${realOrderId}`)} />
-             
-             <Link href={`/feedback?action=create&orderId=${realOrderId}`} className="block text-sm text-slate-500 hover:text-hnu-dark underline">
-               Give Feedback
-             </Link>
+          <div className="mt-8 max-w-md mx-auto">
+            <div className="bg-slate-50 rounded-xl border border-slate-200 p-5">
+              <h3 className="font-bold text-slate-800 text-sm mb-3">What happens next?</h3>
+              <ol className="space-y-3 text-sm text-slate-600">
+                <li className="flex gap-3">
+                  <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold shrink-0">1</span>
+                  <span>Go to the <strong>University Teller</strong> and present this slip to pay.</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold shrink-0">2</span>
+                  <span>Keep the <strong>Official Receipt (OR)</strong> from the teller.</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold shrink-0">3</span>
+                  <span>Visit the <strong>Bookstore</strong> and present your OR to claim your items.</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-xs font-bold shrink-0">4</span>
+                  <span>You will be notified once your order is <strong>Ready for Pickup</strong>.</span>
+                </li>
+              </ol>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 mt-6">
+              <Link href="/shop/orders" className="btn-primary flex-1 justify-center py-3">Track My Orders</Link>
+              <Link href="/shop" className="btn-secondary flex-1 justify-center py-3">Continue Shopping</Link>
+            </div>
           </div>
         </div>
       )
@@ -86,19 +110,33 @@ export default function CheckoutPage() {
           <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 text-green-600">
             <CheckCircle size={40} />
           </div>
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">Order Placed Successfully!</h2>
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">Order Slip Created!</h2>
           <p className="text-slate-500">
             Order # <span className="font-mono font-bold text-slate-700">{orderId}</span>
           </p>
         </div>
 
-        <div className="w-full space-y-6">
-          <AppointmentBooking orderId={realOrderId} onComplete={() => router.push(`/feedback?action=create&orderId=${realOrderId}`)} />
-          
-          <div className="flex justify-center">
-            <Link href={`/feedback?action=create&orderId=${realOrderId}`} className="text-sm text-slate-500 hover:text-hnu-dark underline">
-              Skip booking and give feedback
-            </Link>
+        <div className="w-full max-w-md mx-auto">
+          <div className="bg-green-50 rounded-xl border border-green-200 p-5 mb-6">
+            <h3 className="font-bold text-green-800 text-sm mb-3">What happens next?</h3>
+            <ol className="space-y-3 text-sm text-green-700">
+              <li className="flex gap-3">
+                <span className="w-6 h-6 rounded-full bg-green-100 text-green-800 flex items-center justify-center text-xs font-bold shrink-0">1</span>
+                <span>Visit the <strong>Bookstore</strong> to pay and pick up your items.</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="w-6 h-6 rounded-full bg-green-100 text-green-800 flex items-center justify-center text-xs font-bold shrink-0">2</span>
+                <span>Pay <strong>{new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(placedOrderTotal)}</strong> directly at the counter.</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="w-6 h-6 rounded-full bg-green-100 text-green-800 flex items-center justify-center text-xs font-bold shrink-0">3</span>
+                <span>You will be notified once your order is <strong>Ready for Pickup</strong>.</span>
+              </li>
+            </ol>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Link href="/shop/orders" className="btn-primary flex-1 justify-center py-3">Track My Orders</Link>
+            <Link href="/shop" className="btn-secondary flex-1 justify-center py-3">Continue Shopping</Link>
           </div>
         </div>
       </div>
@@ -118,9 +156,10 @@ export default function CheckoutPage() {
               Pickup Location
             </h3>
             <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-              <p className="font-bold text-slate-800">Holy Name University - Finance Office</p>
-              <p className="text-sm text-slate-500">Janssen Heights, Dampas District</p>
+              <p className="font-bold text-slate-800">HNU Bookstore</p>
+              <p className="text-sm text-slate-500">Holy Name University Campus</p>
               <p className="text-sm text-slate-500">Tagbilaran City, Bohol</p>
+              <p className="text-xs text-slate-400 mt-1">Mon–Fri: 8:00 AM – 5:00 PM · Sat: 8:00 AM – 12:00 PM</p>
             </div>
           </div>
 
@@ -134,8 +173,8 @@ export default function CheckoutPage() {
               <label className="flex items-center gap-3 p-4 border rounded-lg cursor-pointer transition-all hover:border-hnu-gold hover:bg-yellow-50/30 border-hnu-gold bg-yellow-50/10">
                 <input type="radio" name="payment" defaultChecked className="text-hnu-gold focus:ring-hnu-gold" />
                 <div>
-                  <p className="font-bold text-slate-800">Cash on Pickup / Over-the-Counter</p>
-                  <p className="text-xs text-slate-500">Pay directly at the Finance Office cashier.</p>
+                  <p className="font-bold text-slate-800">{cartTotal >= 100 ? 'Pay at University Teller' : 'Pay at Bookstore Counter'}</p>
+                  <p className="text-xs text-slate-500">{cartTotal >= 100 ? 'Orders ₱100+ must be paid at the University Teller. Present the OR at the Bookstore.' : 'Pay directly at the Bookstore counter when you pick up.'}</p>
                 </div>
               </label>
               <label className="flex items-center gap-3 p-4 border border-slate-200 rounded-lg cursor-not-allowed opacity-60">
@@ -167,7 +206,7 @@ export default function CheckoutPage() {
                      </div>
                      <div>
                        <p className="font-medium text-slate-700 line-clamp-1">{item.name}</p>
-                       <p className="text-xs text-slate-500">Qty: {item.quantity}</p>
+                       <p className="text-xs text-slate-500">Qty: {item.quantity}{item.selectedSize ? ` · Size: ${item.selectedSize}` : ''}</p>
                      </div>
                    </div>
                    <p className="font-medium text-slate-900">₱{(item.price * item.quantity).toFixed(2)}</p>

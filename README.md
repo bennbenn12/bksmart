@@ -18,7 +18,7 @@ npm install
 2. Start **MySQL**
 3. Ensure port is `3306` (or update `.env.local`)
 
-### 3. Create Database Schema
+### 3. Create MySQL Database Schema
 Run the SQL file in phpMyAdmin SQL tab (or MySQL CLI):
 ```sql
 SOURCE mysql/schema.sql;
@@ -28,7 +28,7 @@ SOURCE mysql/schema.sql;
 ```bash
 cp .env.local.example .env.local
 ```
-Set database credentials:
+Set MySQL database credentials:
 ```
 DB_HOST=127.0.0.1
 DB_PORT=3306
@@ -135,7 +135,7 @@ npm run dev   # http://localhost:3000
 
 ---
 
-## 🗄️ Database Tables (Chapter III — 3.2.2 File Structure)
+## 🗄️ MySQL Database Tables (Chapter III — 3.2.2 File Structure)
 
 | # | Table | Key Fields |
 |---|-------|-----------|

@@ -2,12 +2,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import Header from '@/components/layout/Header'
 import { Modal, Alert, LoadingSpinner, EmptyState, Badge, Pagination } from '@/components/ui'
-import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/db/client'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { useRealtime } from '@/lib/useRealtime'
 import { useToast } from '@/components/providers/ToastProvider'
-import { formatCurrency, CATEGORIES, SHOPS, shopLabel, cn } from '@/lib/utils'
-import { Package, Plus, Search, Edit2, TrendingUp, AlertTriangle, Loader2, RefreshCw } from 'lucide-react'
+import { formatCurrency, CATEGORIES, SHOPS, shopLabel, cn, CLOTHING_SIZES } from '@/lib/utils'
+import { Package, Plus, Search, Edit2, TrendingUp, AlertTriangle, Loader2, RefreshCw, ImagePlus, X, PlusCircle } from 'lucide-react'
 
 export default function InventoryPage() {
   const { profile } = useAuth()
@@ -23,9 +23,16 @@ export default function InventoryPage() {
   const [showCreate, setCreate] = useState(false)
   const [editItem, setEdit]     = useState(null)
   const [restockItem, setRestock] = useState(null)
+  const [dbCategories, setDbCategories] = useState([])
   const PAGE = 12
   const supabase = createClient()
-  const isManager = ['bookstore_manager','bookstore_staff','working_student'].includes(profile?.role_id)
+  const isManager = ['bookstore_manager','bookstore_staff','working_student'].includes(profile?.role_type)
+  const allCategories = [...new Set([...CATEGORIES, ...dbCategories])]
+
+  const fetchCategories = useCallback(async () => {
+    const { data } = await supabase.from('categories').select('name').eq('is_active', 1)
+    setDbCategories((data || []).map(c => c.name))
+  }, [])
 
   const fetchItems = useCallback(async () => {
     setLoading(true)
@@ -39,6 +46,7 @@ export default function InventoryPage() {
   }, [search, shopFilter, catFilter, lowOnly, page])
 
   useRealtime({ tables:['bookstore_items','inventory_logs'], onRefresh:fetchItems, enabled:!!profile })
+  useEffect(() => { fetchCategories() }, [])
   useEffect(() => { fetchItems() }, [search, shopFilter, catFilter, lowOnly, page])
 
   async function saveItem(form, isEdit) {
@@ -47,7 +55,7 @@ export default function InventoryPage() {
         await supabase.from('bookstore_items').update(form).eq('item_id', form.item_id)
         toast('Item updated.','success')
       } else {
-        await supabase.from('bookstore_items').insert({ ...form, created_by:profile.user_id })
+        await supabase.from('bookstore_items').insert({ ...form, created_by:profile.id_number })
         toast('Item created.','success')
       }
       setCreate(false); setEdit(null)
@@ -58,7 +66,7 @@ export default function InventoryPage() {
     try {
       const newQty = item.stock_quantity + parseInt(qty)
       await supabase.from('bookstore_items').update({ stock_quantity:newQty }).eq('item_id', item.item_id)
-      await supabase.from('inventory_logs').insert({ item_id:item.item_id, changed_by:profile.user_id, change_type:'Restock', quantity_before:item.stock_quantity, quantity_after:newQty, delta:parseInt(qty), notes:notes||null })
+      await supabase.from('inventory_logs').insert({ item_id:item.item_id, changed_by:profile.id_number, change_type:'Restock', quantity_before:item.stock_quantity, quantity_after:newQty, delta:parseInt(qty), notes:notes||null })
       toast(`Restocked ${item.name} (+${qty})`, 'success')
       setRestock(null)
     } catch(e) { toast(e.message,'error') }
@@ -70,16 +78,12 @@ export default function InventoryPage() {
     <div className="page-enter">
       <Header title="Inventory" />
       <div className="p-6 space-y-5">
-        <div className="flex items-center gap-2 text-xs text-green-600 font-semibold">
-          <span className="live-dot"/> Live — updates automatically
-        </div>
-
         {lowCount > 0 && <Alert type="warning" message={`${lowCount} item${lowCount>1?'s':''} at or below reorder level. Consider restocking.`}/>}
 
         <div className="flex flex-wrap gap-3 items-center">
           <div className="relative flex-1 min-w-[160px]"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input className="input pl-9" placeholder="Search items..." value={search} onChange={e=>{setSearch(e.target.value);setPage(1)}}/></div>
           <select className="input w-32" value={shopFilter} onChange={e=>{setShop(e.target.value);setPage(1)}}><option value="">All Shops</option>{SHOPS.map(s=><option key={s} value={s}>{shopLabel(s)}</option>)}</select>
-          <select className="input w-32" value={catFilter} onChange={e=>{setCat(e.target.value);setPage(1)}}><option value="">All Categories</option>{CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
+          <select className="input w-32" value={catFilter} onChange={e=>{setCat(e.target.value);setPage(1)}}><option value="">All Categories</option>{allCategories.map(c=><option key={c} value={c}>{c}</option>)}</select>
           <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer"><input type="checkbox" checked={lowOnly} onChange={e=>setLowOnly(e.target.checked)} className="rounded text-brand-600"/> Low Stock Only</label>
           <button onClick={fetchItems} className="btn-ghost gap-1 text-xs"><RefreshCw size={12}/> Refresh</button>
           {isManager && <button onClick={()=>setCreate(true)} className="btn-primary ml-auto"><Plus size={14}/> Add Item</button>}
@@ -123,21 +127,49 @@ export default function InventoryPage() {
         </div>
       </div>
 
-      {(showCreate || editItem) && <ItemModal item={editItem} onClose={()=>{setCreate(false);setEdit(null)}} onSave={saveItem}/>}
+      {(showCreate || editItem) && <ItemModal item={editItem} onClose={()=>{setCreate(false);setEdit(null)}} onSave={saveItem} categories={allCategories} onCategoryAdded={fetchCategories}/>}
       {restockItem && <RestockModal item={restockItem} onClose={()=>setRestock(null)} onRestock={doRestock}/>}
     </div>
   )
 }
 
-function ItemModal({ item, onClose, onSave }) {
-  const EMPTY = { name:'',description:'',price:'',stock_quantity:'0',reserved_quantity:'0',sku:'',category:'Supply',shop:'Bookstore',reorder_level:'10',unit:'pc',is_active:true }
+function ItemModal({ item, onClose, onSave, categories = CATEGORIES, onCategoryAdded }) {
+  const toast = useToast()
+  const supabase = createClient()
+  const EMPTY = { name:'',description:'',price:'',stock_quantity:'0',reserved_quantity:'0',sku:'',category:'Supply',shop:'Bookstore',reorder_level:'10',unit:'pc',sizes:'',is_active:true,image_url:'' }
   const [form, setForm] = useState(item ? {...item, price:String(item.price), stock_quantity:String(item.stock_quantity), reorder_level:String(item.reorder_level)} : EMPTY)
   const [saving, setSaving] = useState(false)
+  const [images, setImages] = useState(() => {
+    const urls = (item?.image_url || '').split(',').map(s => s.trim()).filter(Boolean)
+    return urls.length ? urls : ['']
+  })
+  const [newCat, setNewCat] = useState('')
+  const [showNewCat, setShowNewCat] = useState(false)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
+
+  function addImageField() { setImages(prev => [...prev, '']) }
+  function removeImage(idx) { setImages(prev => prev.filter((_, i) => i !== idx)) }
+  function updateImage(idx, val) { setImages(prev => prev.map((v, i) => i === idx ? val : v)) }
+
+  async function addCategory() {
+    const name = newCat.trim()
+    if (!name) return
+    try {
+      const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+      const { error } = await supabase.from('categories').insert({ name, slug, is_active: 1 })
+      if (error) throw new Error(error.message || 'Failed to add category')
+      toast(`Category "${name}" added.`, 'success')
+      set('category', name)
+      setNewCat('')
+      setShowNewCat(false)
+      if (onCategoryAdded) onCategoryAdded()
+    } catch (e) { toast(e.message || 'Category may already exist.', 'error') }
+  }
 
   async function submit(e) {
     e.preventDefault(); setSaving(true)
-    await onSave({ ...form, price:parseFloat(form.price), stock_quantity:parseInt(form.stock_quantity), reserved_quantity:parseInt(form.reserved_quantity||'0'), reorder_level:parseInt(form.reorder_level) }, !!item)
+    const imageUrl = images.filter(u => u.trim()).join(', ')
+    await onSave({ ...form, image_url: imageUrl, price:parseFloat(form.price), stock_quantity:parseInt(form.stock_quantity), reserved_quantity:parseInt(form.reserved_quantity||'0'), reorder_level:parseInt(form.reorder_level) }, !!item)
     setSaving(false)
   }
 
@@ -148,13 +180,66 @@ function ItemModal({ item, onClose, onSave }) {
           <div className="col-span-2"><label className="label">Item Name</label><input className="input" required value={form.name} onChange={e=>set('name',e.target.value)}/></div>
           <div><label className="label">SKU</label><input className="input" required value={form.sku} onChange={e=>set('sku',e.target.value)}/></div>
           <div><label className="label">Unit (pc, set…)</label><input className="input" value={form.unit} onChange={e=>set('unit',e.target.value)}/></div>
-          <div><label className="label">Category</label><select className="input" value={form.category} onChange={e=>set('category',e.target.value)}>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></div>
+          <div>
+            <label className="label">Category</label>
+            {showNewCat ? (
+              <div className="flex gap-2">
+                <input className="input flex-1" placeholder="New category name" value={newCat} onChange={e=>setNewCat(e.target.value)} autoFocus />
+                <button type="button" onClick={addCategory} className="btn-primary py-1 px-2 text-xs"><PlusCircle size={12}/></button>
+                <button type="button" onClick={()=>setShowNewCat(false)} className="btn-ghost py-1 px-2 text-xs"><X size={12}/></button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <select className="input flex-1" value={form.category} onChange={e=>set('category',e.target.value)}>{categories.map(c=><option key={c}>{c}</option>)}</select>
+                <button type="button" onClick={()=>setShowNewCat(true)} className="btn-ghost py-1 px-2 text-xs" title="Add new category"><PlusCircle size={14}/></button>
+              </div>
+            )}
+          </div>
           <div><label className="label">Shop</label><select className="input" value={form.shop} onChange={e=>set('shop',e.target.value)}>{SHOPS.map(s=><option key={s} value={s}>{shopLabel(s)}</option>)}</select></div>
           <div><label className="label">Price (₱)</label><input className="input" type="number" step="0.01" required value={form.price} onChange={e=>set('price',e.target.value)}/></div>
           <div><label className="label">Initial Stock</label><input className="input" type="number" value={form.stock_quantity} onChange={e=>set('stock_quantity',e.target.value)}/></div>
           <div><label className="label">Reorder Level</label><input className="input" type="number" value={form.reorder_level} onChange={e=>set('reorder_level',e.target.value)}/></div>
+          {form.category === 'Uniform' && (
+            <div className="col-span-2">
+              <label className="label">Available Sizes</label>
+              <div className="flex flex-wrap gap-2">
+                {CLOTHING_SIZES.map(size => {
+                  const active = (form.sizes||'').split(',').map(s=>s.trim()).filter(Boolean).includes(size)
+                  return (
+                    <button key={size} type="button" onClick={() => {
+                      const current = (form.sizes||'').split(',').map(s=>s.trim()).filter(Boolean)
+                      const next = active ? current.filter(s=>s!==size) : [...current, size]
+                      set('sizes', next.join(','))
+                    }} className={cn('px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition-all', active ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-400')}>
+                      {size}
+                    </button>
+                  )
+                })}
+              </div>
+              {(form.sizes||'').trim() && <p className="text-xs text-slate-400 mt-1">Selected: {form.sizes}</p>}
+            </div>
+          )}
           <div className="col-span-2"><label className="label">Description</label><textarea className="input resize-none" rows={2} value={form.description||''} onChange={e=>set('description',e.target.value)}/></div>
         </div>
+
+        {/* Multiple Images */}
+        <div className="border-t border-slate-100 pt-4">
+          <div className="flex items-center justify-between mb-3">
+            <label className="label mb-0">Image URLs</label>
+            <button type="button" onClick={addImageField} className="btn-ghost text-xs gap-1"><ImagePlus size={12}/> Add Image</button>
+          </div>
+          <div className="space-y-2">
+            {images.map((url, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <input className="input flex-1" placeholder={`Image URL ${idx+1} (e.g. https://...)`} value={url} onChange={e=>updateImage(idx, e.target.value)}/>
+                {url && <div className="w-8 h-8 rounded border border-slate-200 overflow-hidden shrink-0 bg-slate-50"><img src={url} className="w-full h-full object-cover" onError={e=>{e.target.style.display='none'}}/></div>}
+                {images.length > 1 && <button type="button" onClick={()=>removeImage(idx)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"><X size={14}/></button>}
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-slate-400 mt-2">Add multiple image URLs for this item. The first image will be used as the primary display image.</p>
+        </div>
+
         <div className="flex justify-end gap-2"><button type="button" onClick={onClose} className="btn-secondary">Cancel</button><button type="submit" disabled={saving} className="btn-primary">{saving?<Loader2 size={14} className="animate-spin"/>:'Save Item'}</button></div>
       </form>
     </Modal>

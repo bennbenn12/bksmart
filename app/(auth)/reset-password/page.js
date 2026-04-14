@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/db/client'
 import { Loader2, Eye, EyeOff, CheckCircle2, ShieldCheck, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 
@@ -17,9 +17,8 @@ export default function ResetPasswordPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  // Supabase sends the user here with a token in the URL hash.
-  // onAuthStateChange picks it up automatically and creates a session.
   useEffect(() => {
+    setReady(true)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
         setReady(true)
@@ -108,7 +107,6 @@ export default function ResetPasswordPage() {
             </div>
 
           ) : !sessionReady ? (
-            /* ── Waiting for Supabase PASSWORD_RECOVERY event ── */
             <div className="text-center space-y-4">
               <div className="w-14 h-14 bg-brand-50 rounded-full flex items-center justify-center mx-auto">
                 <ShieldCheck size={28} className="text-brand-600" />

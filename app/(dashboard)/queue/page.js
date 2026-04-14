@@ -1,37 +1,48 @@
 'use client'
 import { useEffect, useState, useRef, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import { Modal, Alert, LoadingSpinner, EmptyState, Badge } from '@/components/ui'
-import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/db/client'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { useRealtime } from '@/lib/useRealtime'
 import { useToast } from '@/components/providers/ToastProvider'
-import { QUEUE_STATUS_COLORS, formatDateTime, cn } from '@/lib/utils'
-import { ListOrdered, CheckCircle, Loader2, Volume2, VolumeX, Users, SkipForward, RefreshCw, XCircle } from 'lucide-react'
+import { QUEUE_STATUS_COLORS, formatDateTime, formatCurrency, cn } from '@/lib/utils'
+import { ListOrdered, CheckCircle, Loader2, Volume2, VolumeX, Users, SkipForward, RefreshCw, XCircle, Package, Eye, PlayCircle, ArrowRight } from 'lucide-react'
+import { sendQueueEmail } from '@/app/actions/email'
 
 const today = () => new Date().toISOString().split('T')[0]
 
 export default function QueuePage() {
   const { profile } = useAuth()
   const toast = useToast()
+  const router = useRouter()
   const [queue, setQueue]     = useState([])
   const [loading, setLoading] = useState(true)
   const [acting, setActing]   = useState(false)
   const [soundOn, setSoundOn] = useState(true)
+  const [processingOrder, setProcessingOrder] = useState(null)
+  const [showOrderModal, setShowOrderModal] = useState(false)
+  const [showNextPrompt, setShowNextPrompt] = useState(false)
   const prevProcessingRef     = useRef(null)
   const supabase              = createClient()
-  const isStaff = ['bookstore_manager','bookstore_staff','working_student'].includes(profile?.role_id)
+  const isStaff = ['bookstore_manager','bookstore_staff','working_student'].includes(profile?.role_type)
 
   const fetchQueue = useCallback(async () => {
     let q = supabase.from('queues')
-      .select('*, user:user_id(first_name,last_name,student_id,email)')
+      .select('*, user:user_id(first_name,last_name,id_number,email), order:order_id(order_id,order_number,status,total_amount,user_id)')
       .eq('queue_date', today()).order('queue_number')
-    if (!isStaff) q = q.eq('user_id', profile?.user_id)
+    if (!isStaff) q = q.eq('user_id', profile.id_number)
     const { data } = await q
     const list = data || []
     const nowProcessing = list.find(q => q.status === 'Processing')
     if (soundOn && nowProcessing && prevProcessingRef.current !== nowProcessing.queue_id) {
       playChime(); prevProcessingRef.current = nowProcessing.queue_id
+      // Auto-show order modal if linked order exists
+      if (nowProcessing.order && isStaff) {
+        setProcessingOrder(nowProcessing.order)
+        setShowOrderModal(true)
+      }
     }
     setQueue(list); setLoading(false)
   }, [profile, isStaff, soundOn])
@@ -53,6 +64,29 @@ export default function QueuePage() {
     } catch {}
   }
 
+  // Voice notification for queue numbers
+  function announceQueueNumber(queueNumber, name) {
+    try {
+      if (!('speechSynthesis' in window)) return
+      
+      const utterance = new SpeechSynthesisUtterance(
+        `Now serving queue number ${String(queueNumber).split('').join(' ')}${name ? `, ${name}` : ''}. Please proceed to the counter.`
+      )
+      utterance.rate = 0.9
+      utterance.pitch = 1
+      utterance.volume = 1
+      
+      // Try to use a good English voice
+      const voices = window.speechSynthesis.getVoices()
+      const englishVoice = voices.find(v => v.lang.includes('en') && v.name.includes('Female')) ||
+                          voices.find(v => v.lang.includes('en')) ||
+                          voices[0]
+      if (englishVoice) utterance.voice = englishVoice
+      
+      window.speechSynthesis.speak(utterance)
+    } catch {}
+  }
+
   async function callNext() {
     const waiting = queue.filter(q=>q.status==='Waiting').sort((a,b)=>a.queue_number-b.queue_number)
     if (!waiting.length) { toast('No one is waiting.', 'info'); return }
@@ -61,6 +95,28 @@ export default function QueuePage() {
       const processing = queue.find(q=>q.status==='Processing')
       if (processing) await supabase.from('queues').update({ status:'Completed', completed_at:new Date().toISOString() }).eq('queue_id',processing.queue_id)
       await supabase.from('queues').update({ status:'Processing', called_at:new Date().toISOString() }).eq('queue_id',waiting[0].queue_id)
+      
+      // Play chime and announce
+      if (soundOn) {
+        playChime()
+        setTimeout(() => {
+          announceQueueNumber(waiting[0].queue_number, waiting[0].user?.first_name)
+        }, 800)
+      }
+      
+      // Send email notification to customer
+      if (waiting[0].user?.email) {
+        try {
+          await sendQueueEmail({
+            type: 'QUEUE_CALLED',
+            user: waiting[0].user,
+            queueEntry: waiting[0]
+          })
+        } catch (emailError) {
+          console.error('Failed to send queue notification email:', emailError)
+        }
+      }
+      
       toast(`Now calling #${String(waiting[0].queue_number).padStart(3,'0')}`, 'success')
     } catch(e) { toast(e.message,'error') } finally { setActing(false) }
   }
@@ -71,8 +127,53 @@ export default function QueuePage() {
     setActing(true)
     try {
       await supabase.from('queues').update({ status:'Completed', completed_at:new Date().toISOString() }).eq('queue_id',processing.queue_id)
+      setProcessingOrder(null)
+      setShowOrderModal(false)
+      // Show next prompt if there are more waiting
+      const waiting = queue.filter(q=>q.status==='Waiting').sort((a,b)=>a.queue_number-b.queue_number)
+      if (waiting.length > 0) {
+        setShowNextPrompt(true)
+      }
       toast('Marked as served.','success')
     } catch(e) { toast(e.message,'error') } finally { setActing(false) }
+  }
+
+  async function releaseOrderAndComplete(orderId) {
+    setActing(true)
+    try {
+      // Release the order
+      await supabase.from('orders').update({ 
+        status: 'Released', 
+        released_at: new Date().toISOString(),
+        processed_by: profile.id_number 
+      }).eq('order_id', orderId)
+      // Complete current queue entry
+      const processing = queue.find(q=>q.status==='Processing')
+      if (processing) {
+        await supabase.from('queues').update({ 
+          status: 'Completed', 
+          completed_at: new Date().toISOString(),
+          notes: 'Order released'
+        }).eq('queue_id', processing.queue_id)
+      }
+      setProcessingOrder(null)
+      setShowOrderModal(false)
+      toast('Order released and customer served!','success')
+      // Show next prompt
+      const waiting = queue.filter(q=>q.status==='Waiting').sort((a,b)=>a.queue_number-b.queue_number)
+      if (waiting.length > 0) {
+        setShowNextPrompt(true)
+      }
+    } catch(e) { toast(e.message,'error') } finally { setActing(false) }
+  }
+
+  function viewOrderDetails(orderId) {
+    router.push(`/orders?highlight=${orderId}`)
+  }
+
+  function handleCallNextFromPrompt() {
+    setShowNextPrompt(false)
+    callNext()
   }
 
   async function removeEntry(queueId) {
@@ -86,7 +187,7 @@ export default function QueuePage() {
   const processing = queue.find(q=>q.status==='Processing')
   const waiting    = queue.filter(q=>q.status==='Waiting').sort((a,b)=>a.queue_number-b.queue_number).slice(0, 50)
   const completed  = queue.filter(q=>q.status==='Completed').slice(0, 20)
-  const myEntry    = !isStaff ? queue.find(q=>q.user_id===profile?.user_id) : null
+  const myEntry    = !isStaff ? queue.find(q=>q.user_id===profile.id_number) : null
   const myPos      = myEntry ? waiting.findIndex(q=>q.queue_id===myEntry.queue_id)+1 : 0
 
   if (loading) return <LoadingSpinner />
@@ -106,7 +207,7 @@ export default function QueuePage() {
             {processing ? (
               <div className="num-flip" key={processing.queue_number}>
                 <span className="font-display text-8xl font-black text-white drop-shadow-lg">{String(processing.queue_number).padStart(3,'0')}</span>
-                {processing.user && <p className="text-brand-300 text-sm mt-2">{processing.user.first_name} {processing.user.last_name}{processing.user.student_id && <span className="ml-2 opacity-60">· {processing.user.student_id}</span>}</p>}
+                {processing.user && <p className="text-brand-300 text-sm mt-2">{processing.user.first_name} {processing.user.last_name}{processing.user.id_number && <span className="ml-2 opacity-60">· {processing.user.id_number}</span>}</p>}
               </div>
             ) : (<p className="font-display text-6xl text-brand-600 py-4">— — —</p>)}
             {isStaff && (
@@ -156,10 +257,24 @@ export default function QueuePage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-slate-800 text-sm">{q.user?.first_name} {q.user?.last_name}{i===0&&<span className="ml-2 text-[10px] text-yellow-600 font-bold bg-yellow-100 px-1.5 py-0.5 rounded">NEXT</span>}</p>
-                      {q.user?.student_id && <p className="text-xs text-slate-400">{q.user.student_id}</p>}
+                      {q.user?.id_number && <p className="text-xs font-mono font-bold text-brand-600">{q.user.id_number}</p>}
+                      {q.order && (
+                        <p className="text-xs text-brand-600 flex items-center gap-1">
+                          <Package size={10}/> {q.order.order_number} · {formatCurrency(q.order.total_amount)}
+                        </p>
+                      )}
                       {q.notes && <p className="text-xs text-slate-400 italic">{q.notes}</p>}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      {q.order && (
+                        <button 
+                          onClick={()=>viewOrderDetails(q.order.order_id)} 
+                          className="p-1.5 text-brand-500 hover:text-brand-700 hover:bg-brand-50 rounded-lg"
+                          title="View Order"
+                        >
+                          <Eye size={14}/>
+                        </button>
+                      )}
                       <span className="text-xs text-slate-400">{q.created_at?new Date(q.created_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}):''}</span>
                       <button onClick={()=>removeEntry(q.queue_id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><XCircle size={14}/></button>
                     </div>
@@ -175,13 +290,107 @@ export default function QueuePage() {
           <div className="p-4 grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 gap-2">
             {queue.map(q=>(
               <div key={q.queue_id} className={cn('aspect-square rounded-xl flex items-center justify-center font-display text-lg font-bold border-2 transition-all',
-                q.status==='Processing'?'bg-brand-600 text-white border-brand-500 scale-110 shadow-lg':q.status==='Completed'?'bg-slate-100 text-slate-300 border-slate-100':q.user_id===profile?.user_id?'bg-yellow-100 text-yellow-700 border-yellow-300':'bg-white text-slate-500 border-slate-100')} title={q.status}>
+                q.status==='Processing'?'bg-brand-600 text-white border-brand-500 scale-110 shadow-lg':q.status==='Completed'?'bg-slate-100 text-slate-300 border-slate-100':q.user_id===profile.id_number?'bg-yellow-100 text-yellow-700 border-yellow-300':'bg-white text-slate-500 border-slate-100')} title={q.status}>
                 {String(q.queue_number).padStart(3,'0')}
               </div>
             ))}
             {queue.length===0 && <p className="col-span-full text-center text-slate-400 text-sm py-8">No queue entries today.</p>}
           </div>
         </div>
+
+        {/* Order Details Modal - Shows when processing queue entry with linked order */}
+        {showOrderModal && processingOrder && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={()=>setShowOrderModal(false)}/>
+            <div className="relative bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+              <div className="bg-brand-600 text-white px-6 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white/20 rounded-lg"><Package size={20}/></div>
+                  <div>
+                    <h3 className="font-bold text-lg">Serving Customer</h3>
+                    <p className="text-brand-100 text-sm">Queue #{String(processing?.queue_number || 0).padStart(3,'0')}</p>
+                  </div>
+                </div>
+                <button onClick={()=>setShowOrderModal(false)} className="text-white/80 hover:text-white">✕</button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div className="bg-brand-50 border border-brand-100 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-mono font-bold text-brand-700">{processingOrder.order_number}</span>
+                    <span className={cn('badge', processingOrder.status==='Ready'?'bg-green-100 text-green-700':'bg-yellow-100 text-yellow-700')}>{processingOrder.status}</span>
+                  </div>
+                  <div className="text-2xl font-bold text-slate-800">{formatCurrency(processingOrder.total_amount)}</div>
+                  <p className="text-sm text-slate-500 mt-1">Customer: {processing?.user?.first_name} {processing?.user?.last_name}</p>
+                </div>
+                <div className="text-sm text-slate-600">
+                  <p className="mb-2">What would you like to do?</p>
+                  <ul className="space-y-2 text-xs text-slate-500">
+                    <li className="flex items-center gap-2"><CheckCircle size={12} className="text-green-500"/> View order details to verify items</li>
+                    <li className="flex items-center gap-2"><CheckCircle size={12} className="text-green-500"/> Release order if items are claimed</li>
+                    <li className="flex items-center gap-2"><CheckCircle size={12} className="text-green-500"/> Complete without releasing (for inquiries)</li>
+                  </ul>
+                </div>
+              </div>
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+                <button onClick={()=>viewOrderDetails(processingOrder.order_id)} className="btn-secondary flex-1 gap-1">
+                  <Eye size={14}/> View Order
+                </button>
+                {processingOrder.status === 'Ready' && (
+                  <button 
+                    onClick={()=>releaseOrderAndComplete(processingOrder.order_id)} 
+                    disabled={acting}
+                    className="btn-primary flex-1 gap-1 bg-green-600 hover:bg-green-700"
+                  >
+                    {acting?<Loader2 size={14} className="animate-spin"/>:<CheckCircle size={14}/>}
+                    Release & Done
+                  </button>
+                )}
+                <button 
+                  onClick={completeCurrent} 
+                  disabled={acting}
+                  className="btn-primary flex-1 gap-1"
+                >
+                  {acting?<Loader2 size={14} className="animate-spin"/>:<CheckCircle size={14}/>}
+                  Just Complete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Next Prompt Modal - Shows after completing a queue entry */}
+        {showNextPrompt && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={()=>setShowNextPrompt(false)}/>
+            <div className="relative bg-white rounded-2xl w-full max-w-md shadow-2xl p-6 text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle size={32} className="text-green-600"/>
+              </div>
+              <h3 className="font-bold text-xl text-slate-800 mb-2">Customer Served!</h3>
+              <p className="text-slate-500 mb-6">
+                {waiting.length > 0 
+                  ? `There ${waiting.length === 1 ? 'is' : 'are'} ${waiting.length} more customer${waiting.length === 1 ? '' : 's'} waiting.`
+                  : 'No more customers in queue.'
+                }
+              </p>
+              <div className="flex gap-3">
+                <button onClick={()=>setShowNextPrompt(false)} className="btn-secondary flex-1">
+                  Stay Here
+                </button>
+                {waiting.length > 0 && (
+                  <button 
+                    onClick={handleCallNextFromPrompt} 
+                    disabled={acting}
+                    className="btn-primary flex-1 gap-1"
+                  >
+                    {acting?<Loader2 size={14} className="animate-spin"/>:<PlayCircle size={14}/>}
+                    Call Next #{String(waiting[0]?.queue_number || 0).padStart(3,'0')}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

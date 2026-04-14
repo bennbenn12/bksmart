@@ -6,7 +6,7 @@ export default function TellerSlip({ order, user, items }) {
   if (!order) return null
 
   // Calculate total from items if not provided directly
-  const totalAmount = order.total_amount || (items?.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0)) || 0
+  const totalAmount = parseFloat(order.total_amount) || (items?.reduce((sum, item) => sum + (parseFloat(item.unit_price) * item.quantity), 0)) || 0
 
   return (
     <div className="max-w-md mx-auto bg-white border-2 border-slate-800 p-8 font-mono text-sm relative print:border-none print:w-full print:max-w-none shadow-xl">
@@ -26,8 +26,8 @@ export default function TellerSlip({ order, user, items }) {
           <span className="font-bold">{order.order_number || order.orderNumber}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-500">Student ID:</span>
-          <span className="font-bold">{user?.student_id || 'N/A'}</span>
+          <span className="text-slate-500">ID Number:</span>
+          <span className="font-bold">{user?.id_number || 'N/A'}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-slate-500">Name:</span>

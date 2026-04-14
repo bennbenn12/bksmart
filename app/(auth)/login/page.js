@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/db/client'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -27,11 +27,11 @@ export default function LoginPage() {
       // Check role
       const { data: profile } = await supabase
         .from('users')
-        .select('role_id')
+        .select('role_type')
         .eq('auth_id', user.id)
         .single()
       
-      if (profile?.role_id === 'student' || profile?.role_id === 'parent') {
+      if (profile?.role_type === 'student' || profile?.role_type === 'parent') {
         router.push('/shop')
       } else {
         router.push('/dashboard')
@@ -70,7 +70,7 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="label">Email / Username</label>
+              <label className="label">Email</label>
               <input type="email" className="input" placeholder="you@hnu.edu.ph"
                 value={form.email} onChange={e=>setForm(p=>({...p,email:e.target.value}))} required />
             </div>

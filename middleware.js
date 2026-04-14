@@ -1,4 +1,3 @@
-import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 
 export async function middleware(request) {
@@ -13,25 +12,7 @@ export async function middleware(request) {
     return NextResponse.next()
   }
 
-  let res = NextResponse.next({ request })
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
-      cookies: {
-        getAll() { return request.cookies.getAll() },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          res = NextResponse.next({ request })
-          cookiesToSet.forEach(({ name, value, options }) => res.cookies.set(name, value, options))
-        },
-      },
-    }
-  )
-
-  // Use getSession (no network call — reads from cookie) instead of getUser (always hits Supabase)
-  // getUser is used only where security is critical (server components handle that themselves)
-  const { data: { session } } = await supabase.auth.getSession()
+  const session = request.cookies.get('booksmart_session')?.value || null
 
   const pub = ['/login', '/register', '/forgot-password', '/reset-password']
 
@@ -47,7 +28,7 @@ export async function middleware(request) {
     return NextResponse.redirect(url)
   }
 
-  return res
+  return NextResponse.next()
 }
 
 export const config = {

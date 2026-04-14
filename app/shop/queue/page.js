@@ -1,11 +1,12 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/db/client'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { useRealtime } from '@/lib/useRealtime'
 import { useToast } from '@/components/providers/ToastProvider'
 import { formatDateTime, cn } from '@/lib/utils'
-import { Users, Clock, CheckCircle, AlertCircle, Loader2, ListOrdered, XCircle } from 'lucide-react'
+import { Users, Clock, CheckCircle, AlertCircle, Loader2, ListOrdered, XCircle, Package } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
 
 const today = () => new Date().toISOString().split('T')[0]
 
@@ -18,8 +19,11 @@ export default function StudentQueuePage() {
   const [joining, setJoining]     = useState(false)
   const [orders, setOrders]       = useState([])
   const [selectedOrder, setOrder] = useState('')
+  const [preSelectedOrder, setPreSelectedOrder] = useState(null)
   const [notes, setNotes]         = useState('')
   const supabase = createClient()
+  const searchParams = useSearchParams()
+  const preSelectedOrderId = searchParams.get('orderId')
 
   const fetchQueue = useCallback(async () => {
     const { data } = await supabase.from('queues')
@@ -29,15 +33,23 @@ export default function StudentQueuePage() {
       .order('queue_number')
     const list = data || []
     setQueue(list)
-    setMyQueue(list.find(q=>q.user_id===profile?.user_id)||null)
+    setMyQueue(list.find(q=>q.user_id===profile?.id_number)||null)
     setLoading(false)
   }, [profile])
 
   const fetchOrders = useCallback(async () => {
     if (!profile) return
-    const { data } = await supabase.from('orders').select('order_id,order_number,status').eq('user_id',profile.user_id).in('status',['Pending','Ready']).order('created_at',{ascending:false})
+    const { data } = await supabase.from('orders').select('order_id,order_number,status').eq('user_id',profile.id_number).in('status',['Pending','Ready']).order('created_at',{ascending:false})
     setOrders(data||[])
-  }, [profile])
+    // If preSelectedOrderId exists, find and set it
+    if (preSelectedOrderId && data) {
+      const matched = data.find(o => o.order_id === preSelectedOrderId)
+      if (matched) {
+        setPreSelectedOrder(matched)
+        setOrder(preSelectedOrderId)
+      }
+    }
+  }, [profile, preSelectedOrderId])
 
   useRealtime({ tables:[{ table:'queues', filter:`queue_date=eq.${today()}` }], onRefresh:fetchQueue, enabled:!!profile })
   useEffect(() => { if (profile) { fetchQueue(); fetchOrders() } }, [profile])
@@ -52,10 +64,15 @@ export default function StudentQueuePage() {
   async function handleJoin() {
     setJoining(true)
     try {
-      const { data: existing } = await supabase.from('queues').select('queue_id').eq('user_id',profile.user_id).eq('queue_date',today()).in('status',['Waiting','Processing'])
+      const { data: existing } = await supabase.from('queues').select('queue_id').eq('user_id',profile.id_number).eq('queue_date',today()).in('status',['Waiting','Processing'])
       if (existing?.length > 0) { toast('You are already in the queue.','warning'); setJoining(false); return }
-      await supabase.from('queues').insert({ user_id:profile.user_id, order_id:selectedOrder||null, queue_number:0, status:'Waiting', queue_date:today(), notes:notes||'Walk-in service' })
-      toast('You joined the queue!','success')
+
+      // Get next queue number for today
+      const { data: maxRow } = await supabase.from('queues').select('queue_number').eq('queue_date',today()).order('queue_number',{ascending:false}).limit(1).single()
+      const nextNumber = (maxRow?.queue_number || 0) + 1
+
+      await supabase.from('queues').insert({ user_id:profile.id_number, order_id:selectedOrder||null, queue_number:nextNumber, status:'Waiting', queue_date:today(), notes:notes||'Walk-in service' })
+      toast(`You joined the queue! Your number is #${String(nextNumber).padStart(3,'0')}`,'success')
       setOrder(''); setNotes('')
     } catch(e) { toast(e.message,'error') } finally { setJoining(false) }
   }
@@ -92,7 +109,7 @@ export default function StudentQueuePage() {
           {processing ? (
             <div className="num-flip" key={processing.queue_number}>
               <span className="text-6xl font-display font-bold">{String(processing.queue_number).padStart(3,'0')}</span>
-              {processing.user_id===profile?.user_id && <p className="text-hnu-gold font-bold mt-2 text-lg">🎉 It's your turn! Please proceed to the counter.</p>}
+              {processing.user_id===profile?.id_number && <p className="text-hnu-gold font-bold mt-2 text-lg">🎉 It's your turn! Please proceed to the counter.</p>}
             </div>
           ) : <p className="text-4xl font-display text-white/50 py-2">— — —</p>}
         </div>
@@ -119,7 +136,7 @@ export default function StudentQueuePage() {
           {queue.map(q=>(
             <div key={q.queue_id} className={cn('aspect-square rounded-xl flex items-center justify-center text-sm font-bold border-2',
               q.status==='Processing'?'bg-hnu-dark text-white border-hnu-dark scale-105 shadow-md':
-              q.user_id===profile?.user_id?'bg-yellow-100 text-yellow-700 border-yellow-400':
+              q.user_id===profile?.id_number?'bg-yellow-100 text-yellow-700 border-yellow-400':
               'bg-slate-50 text-slate-500 border-slate-100')}>
               {String(q.queue_number).padStart(3,'0')}
             </div>
@@ -134,11 +151,23 @@ export default function StudentQueuePage() {
           <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2"><ListOrdered className="text-brand-600"/> Join the Queue</h3>
           <div className="space-y-4">
             {orders.length > 0 ? (
-              <div><label className="block text-sm font-semibold text-slate-700 mb-1">Select Order to Pickup</label>
-                <select className="w-full p-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" value={selectedOrder} onChange={e=>setOrder(e.target.value)}>
-                  <option value="">— Select an order (optional) —</option>
-                  {orders.map(o=><option key={o.order_id} value={o.order_id}>{o.order_number} ({o.status})</option>)}
-                </select>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  {preSelectedOrder ? 'Order for Pickup' : 'Select Order to Pickup'}
+                </label>
+                {preSelectedOrder ? (
+                  <div className="p-3 bg-brand-50 border border-brand-100 rounded-lg flex items-center gap-2">
+                    <Package size={16} className="text-brand-600"/>
+                    <span className="text-sm font-medium text-brand-800">{preSelectedOrder.order_number}</span>
+                    <span className="text-xs bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full">{preSelectedOrder.status}</span>
+                    <span className="text-xs text-brand-500 ml-auto">Pre-selected</span>
+                  </div>
+                ) : (
+                  <select className="w-full p-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" value={selectedOrder} onChange={e=>setOrder(e.target.value)}>
+                    <option value="">— Select an order (optional) —</option>
+                    {orders.map(o=><option key={o.order_id} value={o.order_id}>{o.order_number} ({o.status})</option>)}
+                  </select>
+                )}
               </div>
             ) : <div className="p-3 bg-blue-50 text-blue-700 text-sm rounded-lg">No pending orders. You can still join for inquiries.</div>}
             <div><label className="block text-sm font-semibold text-slate-700 mb-1">Purpose / Notes</label>

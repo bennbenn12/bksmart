@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { redirect } from 'next/navigation'
 
 export default async function RootPage() {
@@ -7,8 +7,8 @@ export default async function RootPage() {
 
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase.from('users').select('role_id').eq('auth_id', user.id).single()
+  const { data: profile } = await supabase.from('users').select('role_type').eq('auth_id', user.id).single()
   const shopRoles = ['student','parent','teacher']
-  if (profile && shopRoles.includes(profile.role_id)) redirect('/shop')
+  if (profile && shopRoles.includes(profile.role_type)) redirect('/shop')
   redirect('/dashboard')
 }

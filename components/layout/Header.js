@@ -2,7 +2,8 @@
 import { Bell } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/db/client'
+import Link from 'next/link'
 import { formatDateTime } from '@/lib/utils'
 
 export default function Header({ title }) {
@@ -15,7 +16,7 @@ export default function Header({ title }) {
     if (!profile) return
     fetchNotifs()
     const ch = supabase.channel('notifs')
-      .on('postgres_changes', { event:'INSERT', schema:'public', table:'notifications', filter:`user_id=eq.${profile.user_id}` },
+      .on('postgres_changes', { event:'INSERT', schema:'public', table:'notifications', filter:`user_id=eq.${profile.id_number}` },
         p => setNotifs(prev => [p.new, ...prev]))
       .subscribe()
     return () => supabase.removeChannel(ch)
@@ -23,13 +24,13 @@ export default function Header({ title }) {
 
   async function fetchNotifs() {
     const { data } = await supabase.from('notifications')
-      .select('*').eq('user_id', profile.user_id)
+      .select('*').eq('user_id', profile.id_number)
       .order('created_at', { ascending: false }).limit(12)
     setNotifs(data || [])
   }
 
   async function markAllRead() {
-    await supabase.from('notifications').update({ status: 'Read' }).eq('user_id', profile.user_id).eq('status', 'Unread')
+    await supabase.from('notifications').update({ status: 'Read' }).eq('user_id', profile.id_number).eq('status', 'Unread')
     setNotifs(prev => prev.map(n => ({ ...n, status: 'Read' })))
   }
 
@@ -73,16 +74,16 @@ export default function Header({ title }) {
           )}
         </div>
 
-        {/* Avatar */}
-        <div className="flex items-center gap-2.5 pl-3 border-l border-slate-100">
-          <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-sm font-bold">
-            {profile?.first_name?.[0]}{profile?.last_name?.[0]}
-          </div>
-          <div className="hidden sm:block">
-            <p className="text-sm font-semibold text-slate-700 leading-tight">{profile?.first_name} {profile?.last_name}</p>
-            <p className="text-xs text-slate-400">{profile?.student_id || profile?.employee_id || profile?.username}</p>
-          </div>
-        </div>
+          {/* Avatar / Profile Link */}
+          <Link href="/shop/profile" className="flex items-center gap-2.5 pl-3 border-l border-slate-100 hover:opacity-80 transition-opacity">
+            <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-sm font-bold">
+              {profile?.first_name?.[0]}{profile?.last_name?.[0]}
+            </div>
+            <div className="hidden sm:block">
+              <p className="text-sm font-semibold text-slate-700 leading-tight">{profile?.first_name} {profile?.last_name}</p>
+              <p className="text-xs text-slate-400">{profile?.id_number || profile?.email}</p>
+            </div>
+          </Link>
       </div>
     </header>
   )

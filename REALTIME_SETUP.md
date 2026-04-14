@@ -1,91 +1,43 @@
-# 🔴 How to Enable Realtime Updates in BookSmart
+# 🔄 Live Updates in MySQL Mode
 
-BookSmart uses **Supabase Realtime** so every page — queue board, 
-orders, payments, inventory — updates **live** without users 
-ever needing to refresh the browser.
-
----
-
-## Step 1 — Run the SQL script
-
-In your Supabase Dashboard:
-1. Go to **SQL Editor**
-2. Open `supabase/enable_realtime.sql` from this project
-3. Click **Run**
-
-This adds all BookSmart tables to Supabase's realtime publication.
+In `caps-mysql`, updates are implemented with **polling** instead of Supabase Realtime.
+Pages auto-refresh data at a short interval so users still see updated queue, orders,
+payments, inventory, and notifications without manually reloading.
 
 ---
 
-## Step 2 — Verify in Supabase Dashboard
+## How It Works
 
-1. Go to **Database → Replication**
-2. Click on **supabase_realtime** 
-3. Under "Source", confirm you see:
-   - `queues`
-   - `orders`
-   - `order_items`
-   - `payments`
-   - `appointments`
-   - `notifications`
-   - `bookstore_items`
-   - `job_orders`
-   - `feedback`
+`lib/useRealtime.js` runs an interval timer and triggers each page's `onRefresh` callback.
 
----
-
-## Step 3 — That's it! ✅
-
-No code changes needed. The app already uses `useRealtime()` 
-everywhere. As soon as the tables are published, all pages 
-auto-update.
-
----
-
-## How it works (Technical)
-
-```
-lib/useRealtime.js
+```txt
+setInterval()
   ↓
-  supabase.channel('...').on('postgres_changes', ...)
+onRefresh()
   ↓
-  Every INSERT / UPDATE / DELETE on watched tables
+fetch latest rows from MySQL
   ↓
-  Calls onRefresh() to re-fetch latest data
-  ↓
-  React state updates → UI re-renders
-  ↓
-  User sees changes instantly ✨
+UI state updates
 ```
 
-### What each page listens to:
+---
 
-| Page | Tables Watched |
-|------|---------------|
-| Queue (staff & shop) | `queues` |
-| Dashboard | `orders`, `queues`, `appointments`, `payments`, `job_orders` |
-| Orders | `orders`, `order_items` |
-| Payments | `payments`, `orders` |
-| Appointments | `appointments`, `appointment_slots` |
-| Inventory | `bookstore_items`, `inventory_logs` |
-| Notifications | `notifications` |
+## Default Behavior
 
-### Sound alerts
-The Queue page plays a chime using the Web Audio API whenever 
-the "Now Serving" number changes. Staff can toggle this with 
-the 🔊 button.
+- Polling runs every few seconds while the page is active.
+- Existing page-level refresh functions are reused.
+- Queue sound alerts still work when "Now Serving" changes.
 
 ---
 
 ## Troubleshooting
 
-**Changes not showing in real-time?**
-- Check that `enable_realtime.sql` was run successfully
-- In Supabase → Database → Replication, verify the tables are listed
-- Check browser console for Supabase channel subscription errors
-- Make sure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are correct
+**Data is not updating**
+- Confirm MySQL is running in XAMPP.
+- Confirm `.env.local` DB values match your XAMPP credentials.
+- Check browser console/network for failed `/api/mysql/query` calls.
 
-**"Could not subscribe to channel" error?**
-- Your Supabase project may have the Realtime service paused
-- Go to Supabase Dashboard → Settings → Realtime and ensure it's enabled
+**Auth/session issues**
+- Confirm `AUTH_JWT_SECRET` is set in `.env.local`.
+- Clear cookies and sign in again if session is stale.
 

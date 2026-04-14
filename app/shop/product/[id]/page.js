@@ -1,9 +1,10 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Minus, Plus, ShoppingCart, Heart, Share2 } from 'lucide-react'
 import AddToCartButton from './AddToCartButton' // Client component for interactivity
 import ProductReviews from './ProductReviews' // New Client Component
+import ImageGallery from './ImageGallery'
 
 export default async function ProductPage({ params }) {
   const { id } = await params
@@ -13,6 +14,8 @@ export default async function ProductPage({ params }) {
   if (!item) {
     notFound()
   }
+
+  const images = item.image_url ? item.image_url.split(',').map(s => s.trim()).filter(Boolean) : []
 
   // Related products (same category)
   const { data: related } = await supabase
@@ -36,16 +39,9 @@ export default async function ProductPage({ params }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-0 md:gap-8">
           {/* Image Section */}
           <div className="bg-slate-50 p-8 flex items-center justify-center border-b md:border-b-0 md:border-r border-slate-100 relative group">
-            {item.image_url ? (
-              <img src={item.image_url} alt={item.name} className="max-h-[400px] object-contain drop-shadow-lg mix-blend-multiply transition-transform duration-500 group-hover:scale-105" />
-            ) : (
-              <div className="flex flex-col items-center justify-center text-slate-300">
-                <span className="text-6xl mb-4">📖</span>
-                <span className="text-sm uppercase tracking-widest">No Image Available</span>
-              </div>
-            )}
+            <ImageGallery images={images} name={item.name} />
             
-            <div className="absolute top-4 right-4 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute top-4 right-4 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
               <button className="p-2 bg-white rounded-full shadow-md text-slate-400 hover:text-red-500 transition-colors">
                 <Heart size={20} />
               </button>
@@ -60,8 +56,10 @@ export default async function ProductPage({ params }) {
             <div className="mb-6">
               <div className="flex items-center gap-2 mb-2">
                  <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-bold uppercase tracking-wider">{item.category}</span>
-                 {item.stock_quantity > 0 ? (
-                   <span className="px-2.5 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-bold uppercase tracking-wider">In Stock</span>
+                 {(item.stock_quantity - (item.reserved_quantity || 0)) > 0 ? (
+                   <span className="px-2.5 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-bold uppercase tracking-wider">
+                     {(item.stock_quantity - (item.reserved_quantity || 0)) <= 10 ? `Only ${item.stock_quantity - (item.reserved_quantity || 0)} left` : 'In Stock'}
+                   </span>
                  ) : (
                    <span className="px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-bold uppercase tracking-wider">Out of Stock</span>
                  )}

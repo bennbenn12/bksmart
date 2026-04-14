@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Search, ShoppingCart, User, Bell, ListOrdered, Package, CalendarDays } from 'lucide-react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useState, useEffect, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/db/client'
 import { useRealtime } from '@/lib/useRealtime'
 import { formatDateTime, cn } from '@/lib/utils'
 
@@ -22,15 +22,15 @@ function ShopHeader() {
 
   const fetchNotifs = useCallback(async () => {
     if (!profile) return
-    const { data } = await supabase.from('notifications').select('*').eq('user_id',profile.user_id).order('created_at',{ascending:false}).limit(12)
+    const { data } = await supabase.from('notifications').select('*').eq('user_id',profile.id_number).order('created_at',{ascending:false}).limit(12)
     setNotifs(data||[])
   }, [profile])
 
-  useRealtime({ tables:[{table:'notifications',filter:`user_id=eq.${profile?.user_id}`}], onRefresh:fetchNotifs, enabled:!!profile })
+  useRealtime({ tables:[{table:'notifications',filter:`user_id=eq.${profile?.id_number}`}], onRefresh:fetchNotifs, enabled:!!profile })
   useEffect(() => { if (profile) fetchNotifs() }, [profile])
 
   async function markAllRead() {
-    await supabase.from('notifications').update({status:'Read'}).eq('user_id',profile.user_id).eq('status','Unread')
+    await supabase.from('notifications').update({status:'Read'}).eq('user_id',profile.id_number).eq('status','Unread')
     setNotifs(prev=>prev.map(n=>({...n,status:'Read'})))
   }
 

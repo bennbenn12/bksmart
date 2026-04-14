@@ -24,30 +24,31 @@ export function CartProvider({ children }) {
     localStorage.setItem('booksmart-cart', JSON.stringify(cart))
   }, [cart])
 
+  const cartKey = (item) => item.selectedSize ? `${item.item_id}_${item.selectedSize}` : item.item_id
+
   const addToCart = (product, quantity = 1) => {
     setCart(prev => {
-      const existing = prev.find(item => item.item_id === product.item_id)
+      const key = cartKey(product)
+      const existing = prev.find(item => cartKey(item) === key)
       if (existing) {
         return prev.map(item => 
-          item.item_id === product.item_id 
+          cartKey(item) === key
             ? { ...item, quantity: item.quantity + quantity }
             : item
         )
       }
       return [...prev, { ...product, quantity }]
     })
-    // Optional: Show toast
-    // toast.success('Added to cart')
   }
 
-  const removeFromCart = (productId) => {
-    setCart(prev => prev.filter(item => item.item_id !== productId))
+  const removeFromCart = (key) => {
+    setCart(prev => prev.filter(item => cartKey(item) !== key))
   }
 
-  const updateQuantity = (productId, quantity) => {
+  const updateQuantity = (key, quantity) => {
     if (quantity < 1) return
     setCart(prev => prev.map(item => 
-      item.item_id === productId ? { ...item, quantity } : item
+      cartKey(item) === key ? { ...item, quantity } : item
     ))
   }
 
@@ -59,6 +60,7 @@ export function CartProvider({ children }) {
   return (
     <CartContext.Provider value={{ 
       cart, 
+      cartKey,
       addToCart, 
       removeFromCart, 
       updateQuantity, 

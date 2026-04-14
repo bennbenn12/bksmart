@@ -1,8 +1,9 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import TellerSlip from '@/app/shop/checkout/TellerSlip'
-import { ArrowLeft } from 'lucide-react'
+import PrintStyles from '../../PrintStyles'
+import { ArrowLeft, Printer, Download } from 'lucide-react'
 
 export default async function OrderSlipPage({ params }) {
   const supabase = await createClient()
@@ -22,13 +23,13 @@ export default async function OrderSlipPage({ params }) {
   // Security check: only owner or staff can view
   const { data: currentUserProfile } = await supabase
     .from('users')
-    .select('role_id, user_id')
+    .select('role_type, id_number')
     .eq('auth_id', user.id)
     .single()
 
-  const isStaff = ['bookstore_manager', 'bookstore_staff', 'working_student'].includes(currentUserProfile.role_id)
+  const isStaff = ['bookstore_manager', 'bookstore_staff', 'working_student'].includes(currentUserProfile.role_type)
   
-  if (order.user_id !== currentUserProfile.user_id && !isStaff) {
+  if (order.user_id !== currentUserProfile.id_number && !isStaff) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
@@ -42,11 +43,20 @@ export default async function OrderSlipPage({ params }) {
 
   return (
     <div className="min-h-screen bg-slate-100 py-12 px-4 print:bg-white print:p-0">
+      <PrintStyles />
       <div className="max-w-md mx-auto print:max-w-none">
-        <div className="mb-6 print:hidden">
+        <div className="mb-6 print:hidden flex items-center justify-between">
           <Link href="/shop/profile" className="text-sm text-slate-500 hover:text-slate-800 flex items-center gap-1">
             <ArrowLeft size={16} /> Back to Profile
           </Link>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => window.print()} 
+              className="btn-primary text-sm flex items-center gap-1"
+            >
+              <Printer size={14} /> Print Slip
+            </button>
+          </div>
         </div>
         <TellerSlip order={order} user={order.user} items={order.items} />
       </div>

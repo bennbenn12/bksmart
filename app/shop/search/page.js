@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import Link from 'next/link'
 import { Search } from 'lucide-react'
 
@@ -35,7 +35,7 @@ export default async function SearchPage({ searchParams }) {
                     <span className="text-xs">No Image</span>
                   </div>
                 )}
-                {item.stock_quantity === 0 && (
+                {(item.stock_quantity - (item.reserved_quantity || 0)) <= 0 && (
                   <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10">
                     <span className="bg-slate-800 text-white text-xs px-3 py-1.5 rounded-full font-medium shadow-lg">Out of Stock</span>
                   </div>
@@ -50,7 +50,7 @@ export default async function SearchPage({ searchParams }) {
                     <span className="text-lg font-bold text-hnu-dark">{item.price}</span>
                   </div>
                   <div className="flex items-center justify-between text-[10px] text-slate-400">
-                      <span>{item.stock_quantity > 0 ? `${item.stock_quantity} items left` : 'Sold out'}</span>
+                      <span>{(() => { const avail = item.stock_quantity - (item.reserved_quantity || 0); return avail > 0 ? `${avail} available` : 'Sold out' })()}</span>
                       <span className="text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-100">HNU Official</span>
                   </div>
                 </div>
