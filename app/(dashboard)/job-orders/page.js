@@ -493,6 +493,7 @@ function CreateJOModal({ onClose, onCreated }) {
     setSaving(true)
     try {
       // Insert job order
+      const { generateJobNumber } = await import('@/lib/utils')
       const { data: jobData, error: jobError } = await supabase.from('job_orders').insert({
         requester_id: profile.id_number,
         department_account: form.department_account,
@@ -502,7 +503,8 @@ function CreateJOModal({ onClose, onCreated }) {
         job_type: 'RISO',
         exam_type: form.exam_type || null,
         charge_to: form.charge_to || null,
-        status: 'Draft'
+        status: 'Draft',
+        job_number: generateJobNumber(),
       }).select('job_id').single()
       
       if (jobError) throw jobError

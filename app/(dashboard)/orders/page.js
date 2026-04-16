@@ -645,10 +645,12 @@ function CreateOrderModal({ onClose, onCreated }) {
     if (cart.length === 0) return toast('Please add at least one item.', 'error')
     setSaving(true)
     try {
+      const { generateOrderNumber } = await import('@/lib/utils')
       const { data: order, error: orderErr } = await supabase.from('orders').insert({
         user_id: selectedStudent.id_number,
         total_amount: cartTotal,
         status: 'Pending',
+        order_number: generateOrderNumber(),
       }).select('order_id,order_number').single()
       if (orderErr) throw orderErr
 

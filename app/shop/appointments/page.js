@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Suspense } from 'react'
 import { createClient } from '@/lib/db/client'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { useRealtime } from '@/lib/useRealtime'
@@ -23,6 +23,14 @@ function isOrderReleasedAppt(appt) {
 }
 
 export default function MyAppointmentsPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="animate-spin" size={24}/></div>}>
+      <MyAppointmentsContent />
+    </Suspense>
+  )
+}
+
+function MyAppointmentsContent() {
   const { profile } = useAuth()
   const toast = useToast()
   const [appts, setAppts]     = useState([])
@@ -231,7 +239,8 @@ function BookModal({ onClose, onBooked, preSelectedOrderId }) {
     setLoading(true)
     try {
       const slot = slots.find(s=>s.slot_id===form.slot_id)
-      await supabase.from('appointments').insert({ user_id:profile.id_number, order_id:form.order_id||null, schedule_date:slot.slot_date, time_slot:slot.slot_time, status:'Pending', or_number:form.or_number||null, notes:form.notes||null })
+      const { generateApptNumber } = await import('@/lib/utils')
+      await supabase.from('appointments').insert({ user_id:profile.id_number, order_id:form.order_id||null, schedule_date:slot.slot_date, time_slot:slot.slot_time, status:'Pending', or_number:form.or_number||null, notes:form.notes||null, appt_number:generateApptNumber() })
       await supabase.from('appointment_slots').update({ current_bookings:slot.current_bookings+1 }).eq('slot_id',slot.slot_id)
       onBooked()
     } catch(e) { toast(e.message,'error') } finally { setLoading(false) }

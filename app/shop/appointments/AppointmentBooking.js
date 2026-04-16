@@ -48,6 +48,7 @@ export default function AppointmentBooking({ orderId, onComplete }) {
       const slot = slots.find(s => s.slot_id === selectedSlot)
       if (!slot) throw new Error('Slot not found')
 
+      const { generateApptNumber } = await import('@/lib/utils')
       const { error: insertErr } = await supabase.from('appointments').insert({
         user_id: profile.id_number,
         order_id: orderId || null,
@@ -55,6 +56,7 @@ export default function AppointmentBooking({ orderId, onComplete }) {
         time_slot: slot.slot_time,
         status: 'Pending',
         purpose: 'OR Presentation & Item Pickup',
+        appt_number: generateApptNumber(),
       })
       if (insertErr) throw insertErr
 

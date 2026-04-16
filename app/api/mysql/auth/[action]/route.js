@@ -43,7 +43,7 @@ export async function POST(request, { params }) {
       if (!user) return json({ data: { user: null }, error: { message: 'Invalid email or password' } }, 401)
       
       // Record login timestamp to prevent account cleanup
-      await recordLogin(user.id_number)
+      await recordLogin(user.user_id)
       
       const token = createSessionToken(user)
       const response = json({ data: { user: { id: user.auth_id, email: user.email } }, error: null })
