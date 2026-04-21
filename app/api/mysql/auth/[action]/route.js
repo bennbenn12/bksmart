@@ -102,6 +102,22 @@ export async function POST(request, { params }) {
 
     return json({ data: null, error: { message: 'Unsupported action' } }, 400)
   } catch (error) {
-    return json({ data: null, error: { message: error.message || 'Auth request failed' } }, 500)
+    console.error('Auth error:', error)
+    
+    let message = error.message || 'Auth request failed'
+    
+    if (message.includes('Duplicate entry') && message.includes('id_number')) {
+      const idMatch = message.match(/Duplicate entry '(.*?)' for key/)
+      const id = idMatch ? idMatch[1] : ''
+      message = `ID number ${id} is already registered. Please use a different ID number.`
+    } else if (message.includes('Duplicate entry') && message.includes('email')) {
+      message = 'Email address is already registered. Please use a different email.'
+    } else if (message.includes('Duplicate entry')) {
+      message = 'An account with this information already exists. Please use different details.'
+    } else if (message.includes('ENOTFOUND') || message.includes('ECONNREFUSED')) {
+      message = 'Unable to connect to the server. Please try again later.'
+    }
+    
+    return json({ data: null, error: { message } }, 500)
   }
 }

@@ -45,7 +45,7 @@ export default async function CategoryPage({ params }) {
           <Link href={`/shop/product/${item.item_id}`} key={item.item_id} className="bg-white rounded-lg shadow-card hover:shadow-card-hover transition-all group overflow-hidden border border-slate-100 flex flex-col h-full hover:-translate-y-1 duration-300">
             <div className="aspect-square bg-slate-50 relative overflow-hidden border-b border-slate-100">
                 {item.image_url ? (
-                  <img src={item.image_url} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <img src={item.image_url.split(',')[0].trim()} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
                     <span className="text-4xl mb-2">📖</span>
@@ -54,7 +54,9 @@ export default async function CategoryPage({ params }) {
                 )}
                 {(item.stock_quantity - (item.reserved_quantity || 0)) <= 0 && (
                   <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10">
-                    <span className="bg-slate-800 text-white text-xs px-3 py-1.5 rounded-full font-medium shadow-lg">Out of Stock</span>
+                    <span className={`text-xs px-3 py-1.5 rounded-full font-medium shadow-lg ${item.allow_preorder ? 'bg-amber-500 text-white' : 'bg-slate-800 text-white'}`}>
+                      {item.allow_preorder ? 'Pre-order' : 'Out of Stock'}
+                    </span>
                   </div>
                 )}
             </div>
@@ -67,7 +69,7 @@ export default async function CategoryPage({ params }) {
                     <span className="text-lg font-bold text-hnu-dark">{item.price}</span>
                   </div>
                   <div className="flex items-center justify-between text-[10px] text-slate-400">
-                      <span>{(() => { const avail = item.stock_quantity - (item.reserved_quantity || 0); return avail > 0 ? `${avail} available` : 'Sold out' })()}</span>
+                      <span>{(() => { const avail = item.stock_quantity - (item.reserved_quantity || 0); return avail > 0 ? `${avail} available` : item.allow_preorder ? 'Pre-order available' : 'Sold out' })()}</span>
                       <span className="text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-100">HNU Official</span>
                   </div>
                 </div>

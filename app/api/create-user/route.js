@@ -188,8 +188,17 @@ export async function POST(request) {
 
   } catch (error) {
     console.error('Create user error:', error)
+    
+    let errorMessage = error.message || 'Failed to create user'
+    
+    if (error.message?.includes('Duplicate entry') && error.message?.includes('id_number')) {
+      const idNumberMatch = error.message.match(/Duplicate entry '(.*?)' for key/)
+      const duplicateId = idNumberMatch ? idNumberMatch[1] : ''
+      errorMessage = `ID number ${duplicateId} is already registered. Please use a different ID number.`
+    }
+    
     return NextResponse.json(
-      { error: error.message || 'Failed to create user' },
+      { error: errorMessage },
       { status: 500 }
     )
   }

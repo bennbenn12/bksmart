@@ -37,7 +37,7 @@ export default function EditProfileButton({ profile }) {
         last_name: form.last_name,
         contact_number: form.contact_number || null,
       }
-      const { error: updateErr } = await supabase.from('users').update(updates).eq('id_number', profile.id_number)
+      const { error: updateErr } = await supabase.from('users').update(updates).eq('user_id', profile.user_id)
       if (updateErr) throw updateErr
 
       // Update password if provided

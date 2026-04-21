@@ -28,6 +28,7 @@ export default function CartPage() {
   }
 
   const needsTeller = cartTotal >= 100
+  const hasPreorderItems = cart.some(item => item.isPreorder)
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -40,23 +41,38 @@ export default function CartPage() {
         {/* Cart Items */}
         <div className="lg:col-span-2 space-y-3">
           {cart.map(item => (
-            <div key={cartKey(item)} className="bg-white rounded-xl border border-slate-100 p-4 flex items-center gap-4 hover:border-slate-200 transition-colors shadow-sm">
-              <div className="w-16 h-16 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-100 shrink-0 overflow-hidden">
-                {item.image_url ? <img src={item.image_url} alt={item.name} className="w-full h-full object-cover"/> : <span className="text-2xl">📖</span>}
+            <div key={cartKey(item)} className="bg-white rounded-xl border border-slate-100 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 hover:border-slate-200 transition-colors shadow-sm">
+              {/* Mobile: Top row with image + details */}
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-100 shrink-0 overflow-hidden">
+                  {item.image_url ? <img src={item.image_url.split(',')[0].trim()} alt={item.name} className="w-full h-full object-cover"/> : <span className="text-xl sm:text-2xl">📖</span>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold text-slate-800 text-sm sm:text-base line-clamp-1">{item.name}</p>
+                    {item.isPreorder && (
+                      <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded shrink-0">Pre-order</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">{item.category} · {item.shop?.replace('_',' ')}{item.selectedSize ? ` · Size: ${item.selectedSize}` : ''}</p>
+                  <p className="font-bold text-hnu-dark mt-1 sm:hidden">{formatCurrency(item.price)}</p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-slate-800 text-sm truncate">{item.name}</p>
-                <p className="text-xs text-slate-400 mt-0.5">{item.category} · {item.shop?.replace('_',' ')}{item.selectedSize ? ` · Size: ${item.selectedSize}` : ''}</p>
-                <p className="font-bold text-hnu-dark mt-1">{formatCurrency(item.price)}</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button onClick={()=>updateQuantity(cartKey(item), item.quantity-1)} className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors"><Minus size={12}/></button>
-                <span className="w-8 text-center font-bold text-slate-700">{item.quantity}</span>
-                <button onClick={()=>updateQuantity(cartKey(item), item.quantity+1)} className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors"><Plus size={12}/></button>
-              </div>
-              <div className="text-right shrink-0">
-                <p className="font-bold text-slate-700">{formatCurrency(item.price * item.quantity)}</p>
-                <button onClick={()=>handleRemove(item)} className="mt-1 text-red-400 hover:text-red-600 transition-colors"><Trash2 size={14}/></button>
+
+              {/* Mobile: Bottom row with qty + price + remove */}
+              <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                {/* Qty controls */}
+                <div className="flex items-center gap-2 sm:gap-2">
+                  <button onClick={()=>updateQuantity(cartKey(item), item.quantity-1)} className="w-9 h-9 sm:w-7 sm:h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors active:scale-95"><Minus size={14}/></button>
+                  <span className="w-10 sm:w-8 text-center font-bold text-slate-700">{item.quantity}</span>
+                  <button onClick={()=>updateQuantity(cartKey(item), item.quantity+1)} className="w-9 h-9 sm:w-7 sm:h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors active:scale-95"><Plus size={14}/></button>
+                </div>
+
+                {/* Price + Remove */}
+                <div className="flex items-center gap-3">
+                  <p className="font-bold text-slate-700 text-base sm:text-sm">{formatCurrency(item.price * item.quantity)}</p>
+                  <button onClick={()=>handleRemove(item)} className="p-2 sm:p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors active:scale-95"><Trash2 size={18}/></button>
+                </div>
               </div>
             </div>
           ))}
@@ -81,6 +97,14 @@ export default function CartPage() {
               : <p>Below ₱100 — pay directly at the <strong>Bookstore counter</strong> upon pickup.</p>
             }
           </div>
+
+          {/* Pre-order note */}
+          {hasPreorderItems && (
+            <div className="rounded-xl p-4 border text-sm bg-amber-50 border-amber-200 text-amber-800">
+              <p className="font-bold mb-1">Pre-order Items</p>
+              <p>Your cart contains pre-order items. These will be reserved for you and will be available for pickup once restocked.</p>
+            </div>
+          )}
 
           <Link href="/shop/checkout" className="block w-full btn-primary py-3 justify-center text-base font-bold shadow-lg shadow-brand-500/20 text-center">
             Proceed to Checkout <ArrowRight size={16}/>

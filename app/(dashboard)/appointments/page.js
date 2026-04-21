@@ -1,9 +1,11 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import { Modal, Alert, LoadingSpinner, EmptyState, Pagination } from '@/components/ui'
 import { createClient } from '@/lib/db/client'
 import { useAuth } from '@/components/providers/AuthProvider'
+import { useRealtime } from '@/lib/useRealtime'
 import { useToast } from '@/components/providers/ToastProvider'
 import { formatDate, formatTime, APPT_STATUS_COLORS, cn } from '@/lib/utils'
 import { CalendarDays, Plus, Search, CheckCircle, Clock, RefreshCw, Loader2, Settings, Trash2, X, ShoppingCart, Package, Info, Eye } from 'lucide-react'
@@ -23,6 +25,7 @@ export default function AppointmentsPage() {
   const [showSlots, setShowSlots] = useState(false)
   const PAGE = 12
   const supabase = createClient()
+  const router = useRouter()
 
   const fetchAppts = useCallback(async () => {
     if (!profile) return
@@ -41,15 +44,15 @@ export default function AppointmentsPage() {
     if (data?.length) {
       const allIds = [...new Set([...data.map(a => a.user_id), ...data.map(a => a.confirmed_by)].filter(Boolean))]
       if (allIds.length) {
-        const { data: users } = await supabase.from('users').select('id_number,first_name,last_name').in('id_number', allIds)
-        const userMap = Object.fromEntries((users || []).map(u => [u.id_number, u]))
+        const { data: users } = await supabase.from('users').select('user_id,first_name,last_name,id_number').in('user_id', allIds)
+        const userMap = Object.fromEntries((users || []).map(u => [u.user_id, u]))
         data.forEach(a => { a._user = userMap[a.user_id] || null; a._confirmedBy = userMap[a.confirmed_by] || null })
       }
       // Fetch linked orders with items
       const orderIds = [...new Set(data.map(a => a.order_id).filter(Boolean))]
       if (orderIds.length) {
         const { data: ords } = await supabase.from('orders')
-          .select('order_id,order_number,order_items(quantity,bookstore_items(name,category))')
+          .select('order_id,order_number,items:order_items(quantity,item:item_id(name,category))')
           .in('order_id', orderIds)
         const ordMap = Object.fromEntries((ords || []).map(o => [o.order_id, o]))
         data.forEach(a => { a._order = ordMap[a.order_id] || null })
@@ -64,13 +67,28 @@ export default function AppointmentsPage() {
   }
 }, [profile, statusFilter, dateFilter, search, page])
 
+  useRealtime({ tables:['appointments','appointment_slots'], onRefresh:fetchAppts, enabled:!!profile })
   useEffect(() => { if (profile) fetchAppts() }, [profile, statusFilter, dateFilter, search, page])
 
   async function updateApptStatus(appt, newStatus) {
     try {
-      const updates = { status: newStatus, confirmed_by: profile.id_number }
+      const updates = { status: newStatus, confirmed_by: profile.user_id }
       if (newStatus === 'Completed') updates.completed_at = new Date().toISOString()
       await supabase.from('appointments').update(updates).eq('appointment_id', appt.appointment_id)
+
+      // If cancelling/declining, release the slot booking
+      if (newStatus === 'Cancelled' && appt.status !== 'Cancelled') {
+        const { data: slotData } = await supabase.from('appointment_slots')
+          .select('slot_id, current_bookings')
+          .eq('slot_date', appt.schedule_date)
+          .eq('slot_time', appt.time_slot)
+          .single()
+        if (slotData) {
+          await supabase.from('appointment_slots').update({
+            current_bookings: Math.max(0, slotData.current_bookings - 1)
+          }).eq('slot_id', slotData.slot_id)
+        }
+      }
 
       // Notify the student
       const notifMap = {
@@ -84,20 +102,9 @@ export default function AppointmentsPage() {
         await supabase.from('notifications').insert({ user_id: appt.user_id, title: n.title, message: n.message, type: n.type, reference_type: 'appointment', reference_id: appt.appointment_id })
       }
 
-      // If cancelled, release the slot booking
-      if (newStatus === 'Cancelled') {
-        const { data: slotData } = await supabase.from('appointment_slots')
-          .select('slot_id, current_bookings')
-          .eq('slot_date', appt.schedule_date)
-          .eq('slot_time', appt.time_slot)
-          .single()
-        if (slotData) {
-          await supabase.from('appointment_slots').update({ current_bookings: Math.max(0, slotData.current_bookings - 1) }).eq('slot_id', slotData.slot_id)
-        }
-      }
-
       toast(`Appointment marked as ${newStatus}.`, 'success')
-      fetchAppts()
+      await fetchAppts() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
     } catch (e) { toast(e.message, 'error') }
   }
 
@@ -176,16 +183,16 @@ export default function AppointmentsPage() {
                                   <ShoppingCart size={11}/>
                                   Order: {a._order.order_number}
                                 </div>
-                                {a._order.order_items && a._order.order_items.length > 0 ? (
+                                {a._order.items && a._order.items.length > 0 ? (
                                   <div className="space-y-0.5">
-                                    {a._order.order_items.slice(0, 3).map((item, idx) => (
+                                    {a._order.items.slice(0, 3).map((item, idx) => (
                                       <div key={idx} className="flex items-center justify-between text-[10px]">
-                                        <span className="text-slate-600 truncate max-w-[120px]">{item.bookstore_items?.name}</span>
+                                        <span className="text-slate-600 truncate max-w-[120px]">{item.item?.name}</span>
                                         <span className="text-slate-400">×{item.quantity}</span>
                                       </div>
                                     ))}
-                                    {a._order.order_items.length > 3 && (
-                                      <div className="text-[10px] text-brand-600 font-medium">+{a._order.order_items.length - 3} more items</div>
+                                    {a._order.items.length > 3 && (
+                                      <div className="text-[10px] text-brand-600 font-medium">+{a._order.items.length - 3} more items</div>
                                     )}
                                   </div>
                                 ) : (

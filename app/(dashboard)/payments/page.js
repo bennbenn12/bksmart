@@ -84,7 +84,7 @@ export default function PaymentsPage() {
     if (form.payment_source==='Teller' && !form.or_number.trim()) { toast('OR number is required for Teller payments.','warning'); return }
     setActing(true)
     try {
-      await supabase.from('payments').insert({ order_id:form.order_id, amount, payment_source:form.payment_source, or_number:form.or_number||null, notes:form.notes||null, date_paid:new Date().toISOString(), verified_by:profile.id_number, verified_at:new Date().toISOString() })
+      await supabase.from('payments').insert({ order_id:form.order_id, amount, payment_source:form.payment_source, or_number:form.or_number||null, notes:form.notes||null, date_paid:new Date().toISOString(), verified_by:profile.user_id, verified_at:new Date().toISOString() })
 
       // Notify the customer (in-app notification)
       const order = pendingOrders.find(o=>o.order_id===form.order_id)
@@ -106,7 +106,8 @@ export default function PaymentsPage() {
 
       toast('Payment recorded and verified.','success')
       setShowRecord(false); setForm({order_id:'',amount:'',payment_source:'Bookstore',or_number:'',notes:''})
-      
+      await fetchPayments() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
       // Redirect to orders page with the order highlighted for release
       router.push(`/orders?highlight=${form.order_id}&action=release`)
     } catch(e) { toast(e.message,'error') } finally { setActing(false) }

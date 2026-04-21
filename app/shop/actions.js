@@ -25,7 +25,7 @@ export async function createOrder(cartItems, totalAmount) {
     const stockMap = Object.fromEntries((stockData || []).map(s => [s.item_id, s]))
     const outOfStock = []
 
-    const preorderItems = []
+    const preorderItemIds = new Set()
     for (const item of cartItems) {
       const stock = stockMap[item.item_id]
       if (!stock) {
@@ -36,12 +36,7 @@ export async function createOrder(cartItems, totalAmount) {
       if (available < item.quantity) {
         // Check if pre-order is allowed
         if (stock.allow_preorder) {
-          preorderItems.push({
-            name: stock.name,
-            requested: item.quantity,
-            available,
-            shortfall: item.quantity - available
-          })
+          preorderItemIds.add(item.item_id)
         } else {
           outOfStock.push(
             available <= 0
@@ -57,16 +52,16 @@ export async function createOrder(cartItems, totalAmount) {
     }
 
     // Determine if order contains pre-order items
-    const hasPreorderItems = preorderItems.length > 0
+    const hasPreorderItems = preorderItemIds.size > 0
 
-    // Insert order — order_number generated in app code
+    // Insert order — all orders start as Pending (no separate Preordered status)
     const { generateOrderNumber } = await import('@/lib/utils')
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert({
         user_id: profile.user_id,
         total_amount: totalAmount,
-        status: hasPreorderItems ? 'Preordered' : 'Pending',
+        status: 'Pending',
         is_preorder: hasPreorderItems,
         order_number: generateOrderNumber(),
       })
@@ -75,7 +70,7 @@ export async function createOrder(cartItems, totalAmount) {
 
     if (orderError) throw orderError
 
-    // Insert order items
+    // Insert order items with pre-order flag
     const { error: itemsError } = await supabase
       .from('order_items')
       .insert(cartItems.map(item => ({
@@ -83,13 +78,19 @@ export async function createOrder(cartItems, totalAmount) {
         item_id: item.item_id,
         quantity: item.quantity,
         unit_price: item.price,
+        is_preorder_item: preorderItemIds.has(item.item_id) ? 1 : 0,
         ...(item.selectedSize ? { size: item.selectedSize } : {}),
       })))
 
     if (itemsError) throw itemsError
 
-    // Update reserved_quantity for each item — try rpc, fall back to direct update
+    // Update reserved_quantity for each item (only for non-preorder items)
     for (const item of cartItems) {
+      // Skip stock reservation for pre-order items
+      if (preorderItemIds.has(item.item_id)) {
+        continue
+      }
+
       const { error: rpcError } = await supabase.rpc('increment_reserved', {
         p_item_id: item.item_id,
         p_qty: item.quantity,

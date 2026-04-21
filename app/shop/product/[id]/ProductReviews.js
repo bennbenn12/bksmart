@@ -37,7 +37,7 @@ export default function ProductReviews({ itemId }) {
     setSubmitting(true)
     const { error } = await supabase.from('feedback').insert({
       item_id: itemId,
-      user_id: profile.id_number,
+      user_id: profile.user_id,
       rating,
       content: comment,
       // order_id is optional here, we're reviewing the item directly

@@ -4,6 +4,7 @@ import { executePayload } from '@/lib/mysql/supabaseCompat'
 import { verifySessionToken, getSessionCookieName } from '@/lib/mysql/session'
 
 export async function POST(request) {
+  let payload = null
   try {
     const cookieStore = await cookies()
     const token = cookieStore.get(getSessionCookieName())?.value
@@ -14,7 +15,7 @@ export async function POST(request) {
       return NextResponse.json({ data: null, error: { message: 'Unauthorized' } }, { status: 401 })
     }
 
-    const payload = await request.json()
+    payload = await request.json()
     const { table, action } = payload
     const isAdmin = ['bookstore_manager', 'bookstore_staff', 'working_student', 'risographer'].includes(session.role)
     
@@ -34,6 +35,8 @@ export async function POST(request) {
 
       if (action === 'select' && userSelects.includes(table)) {
         payload.filters = payload.filters || []
+        console.log('[Query API] Before filter - session:', { sub: session.sub, user_id: session.user_id, role: session.role })
+        console.log('[Query API] Existing filters:', payload.filters)
         if (table === 'users') {
           payload.filters.push({ op: 'eq', column: 'auth_id', value: session.sub })
         } else if (table === 'job_orders') {
@@ -42,6 +45,7 @@ export async function POST(request) {
         } else {
           payload.filters.push({ op: 'eq', column: 'user_id', value: session.user_id })
         }
+        console.log('[Query API] After adding filter:', payload.filters)
       }
 
       const allowedWrites = ['orders', 'order_items', 'appointments', 'feedback', 'queues', 'notifications', 'categories', 'job_orders', 'riso_job_items']

@@ -59,9 +59,9 @@ export default function DashboardPage() {
       setPendingJOs(jos.data || [])
     } else {
       const [myOrders, myAppts, myQueue] = await Promise.all([
-        supabase.from('orders').select('order_id,status,total_amount,order_number,created_at').eq('user_id',profile.id_number).order('created_at',{ascending:false}).limit(5),
-        supabase.from('appointments').select('appointment_id,schedule_date,time_slot,status').eq('user_id',profile.id_number).gte('schedule_date',today).limit(3),
-        supabase.from('queues').select('queue_id,queue_number,status').eq('user_id',profile.id_number).eq('queue_date',today).in('status',['Waiting','Processing']).limit(1),
+        supabase.from('orders').select('order_id,status,total_amount,order_number,created_at').eq('user_id',profile.user_id).order('created_at',{ascending:false}).limit(5),
+        supabase.from('appointments').select('appointment_id,schedule_date,time_slot,status').eq('user_id',profile.user_id).gte('schedule_date',today).limit(3),
+        supabase.from('queues').select('queue_id,queue_number,status').eq('user_id',profile.user_id).eq('queue_date',today).in('status',['Waiting','Processing']).limit(1),
       ])
       setStats({ myOrders:myOrders.data?.length||0, myAppts:myAppts.data?.length||0 })
       setOrders(myOrders.data||[])

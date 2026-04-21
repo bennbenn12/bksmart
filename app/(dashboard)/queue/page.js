@@ -28,11 +28,12 @@ export default function QueuePage() {
   const supabase              = createClient()
   const isStaff = ['bookstore_manager','bookstore_staff','working_student'].includes(profile?.role_type)
 
-  const fetchQueue = useCallback(async () => {
+  const fetchQueue = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     let q = supabase.from('queues')
       .select('*, user:user_id(first_name,last_name,id_number,email), order:order_id(order_id,order_number,status,total_amount,user_id)')
       .eq('queue_date', today()).order('queue_number')
-    if (!isStaff) q = q.eq('user_id', profile.id_number)
+    if (!isStaff) q = q.eq('user_id', profile.user_id)
     const { data } = await q
     const list = data || []
     const nowProcessing = list.find(q => q.status === 'Processing')
@@ -44,7 +45,8 @@ export default function QueuePage() {
         setShowOrderModal(true)
       }
     }
-    setQueue(list); setLoading(false)
+    setQueue(list)
+    setLoading(false)
   }, [profile, isStaff, soundOn])
 
   useRealtime({ tables:[{ table:'queues', filter:`queue_date=eq.${today()}` }], onRefresh:fetchQueue, enabled:!!profile })
@@ -118,6 +120,8 @@ export default function QueuePage() {
       }
       
       toast(`Now calling #${String(waiting[0].queue_number).padStart(3,'0')}`, 'success')
+      await fetchQueue() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
     } catch(e) { toast(e.message,'error') } finally { setActing(false) }
   }
 
@@ -135,6 +139,8 @@ export default function QueuePage() {
         setShowNextPrompt(true)
       }
       toast('Marked as served.','success')
+      await fetchQueue() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
     } catch(e) { toast(e.message,'error') } finally { setActing(false) }
   }
 
@@ -145,7 +151,7 @@ export default function QueuePage() {
       await supabase.from('orders').update({ 
         status: 'Released', 
         released_at: new Date().toISOString(),
-        processed_by: profile.id_number 
+        processed_by: profile.user_id 
       }).eq('order_id', orderId)
       // Complete current queue entry
       const processing = queue.find(q=>q.status==='Processing')
@@ -159,6 +165,8 @@ export default function QueuePage() {
       setProcessingOrder(null)
       setShowOrderModal(false)
       toast('Order released and customer served!','success')
+      await fetchQueue() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
       // Show next prompt
       const waiting = queue.filter(q=>q.status==='Waiting').sort((a,b)=>a.queue_number-b.queue_number)
       if (waiting.length > 0) {
@@ -181,13 +189,15 @@ export default function QueuePage() {
     try {
       await supabase.from('queues').update({ status:'Completed', notes:'Removed by staff' }).eq('queue_id',queueId)
       toast('Removed from queue.','info')
+      await fetchQueue() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
     } catch(e) { toast(e.message,'error') } finally { setActing(false) }
   }
 
   const processing = queue.find(q=>q.status==='Processing')
   const waiting    = queue.filter(q=>q.status==='Waiting').sort((a,b)=>a.queue_number-b.queue_number).slice(0, 50)
   const completed  = queue.filter(q=>q.status==='Completed').slice(0, 20)
-  const myEntry    = !isStaff ? queue.find(q=>q.user_id===profile.id_number) : null
+  const myEntry    = !isStaff ? queue.find(q=>q.user_id===profile.user_id) : null
   const myPos      = myEntry ? waiting.findIndex(q=>q.queue_id===myEntry.queue_id)+1 : 0
 
   if (loading) return <LoadingSpinner />
@@ -290,7 +300,7 @@ export default function QueuePage() {
           <div className="p-4 grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 gap-2">
             {queue.map(q=>(
               <div key={q.queue_id} className={cn('aspect-square rounded-xl flex items-center justify-center font-display text-lg font-bold border-2 transition-all',
-                q.status==='Processing'?'bg-brand-600 text-white border-brand-500 scale-110 shadow-lg':q.status==='Completed'?'bg-slate-100 text-slate-300 border-slate-100':q.user_id===profile.id_number?'bg-yellow-100 text-yellow-700 border-yellow-300':'bg-white text-slate-500 border-slate-100')} title={q.status}>
+                q.status==='Processing'?'bg-brand-600 text-white border-brand-500 scale-110 shadow-lg':q.status==='Completed'?'bg-slate-100 text-slate-300 border-slate-100':q.user_id===profile.user_id?'bg-yellow-100 text-yellow-700 border-yellow-300':'bg-white text-slate-500 border-slate-100')} title={q.status}>
                 {String(q.queue_number).padStart(3,'0')}
               </div>
             ))}

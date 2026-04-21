@@ -67,7 +67,7 @@ export default function RisoForm() {
       const { data: jobData, error: jobError } = await supabase
         .from('job_orders')
         .insert({
-          requester_id: profile.id_number,
+          requester_id: profile.user_id,
           department_account: form.department_account,
           cost_center: form.cost_center || null,
           exam_type: form.exam_type || null,
@@ -102,7 +102,7 @@ export default function RisoForm() {
 
       // Send notification to teacher (in-app)
       await supabase.from('notifications').insert({
-        user_id: profile.id_number,
+        user_id: profile.user_id,
         title: 'RISO Job Order Submitted - Bring Documents',
         message: `Your RISO Job Order ${jobData.job_id.slice(0,8)} has been submitted. Please bring your original documents to the Bookstore for printing.`,
         type: 'info',
@@ -179,21 +179,21 @@ export default function RisoForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
+    <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6 space-y-4 sm:space-y-5">
       
-      <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
+      <div className="bg-purple-50 rounded-xl p-3 sm:p-4 border border-purple-100">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">🖨️</span>
+          <span className="text-xl sm:text-2xl">🖨️</span>
           <div>
-            <p className="font-semibold text-purple-900">RISO Printing Services</p>
+            <p className="font-semibold text-purple-900 text-sm sm:text-base">RISO Printing Services</p>
             <p className="text-xs text-purple-700">For examination papers and bulk printing</p>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         <div>
-          <label className="label">Department Account <span className="text-red-500">*</span></label>
+          <label className="label text-sm">Department Account <span className="text-red-500">*</span></label>
           <input 
             className="input" 
             value={form.department_account}
@@ -205,7 +205,7 @@ export default function RisoForm() {
           <datalist id="depts">{DEPTS.map(d => <option key={d} value={d}/>)}</datalist>
         </div>
         <div>
-          <label className="label">Cost Center</label>
+          <label className="label text-sm">Cost Center</label>
           <input 
             className="input" 
             value={form.cost_center}
@@ -215,16 +215,16 @@ export default function RisoForm() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         <div>
-          <label className="label">Exam Type</label>
+          <label className="label text-sm">Exam Type</label>
           <select className="input" value={form.exam_type} onChange={e => set('exam_type', e.target.value)}>
             <option value="">Select...</option>
             {EXAM_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
           </select>
         </div>
         <div>
-          <label className="label">Charge To</label>
+          <label className="label text-sm">Charge To</label>
           <input 
             className="input" 
             value={form.charge_to}
@@ -235,49 +235,53 @@ export default function RisoForm() {
       </div>
 
       <div className="border border-slate-200 rounded-xl overflow-hidden">
-        <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+        <div className="bg-slate-50 px-3 sm:px-4 py-2 border-b border-slate-200">
           <p className="font-medium text-sm text-slate-700">SUBJECTS</p>
         </div>
-        <div className="p-4 space-y-3">
+        <div className="p-3 sm:p-4 space-y-4">
           {risoItems.map((item, index) => (
-            <div key={index} className="grid grid-cols-12 gap-2 items-end">
-              <div className="col-span-4">
-                <label className="text-xs text-slate-500">Subject</label>
+            <div key={index} className="grid grid-cols-1 sm:grid-cols-12 gap-2 sm:items-end bg-slate-50/50 sm:bg-transparent rounded-lg p-3 sm:p-0 border sm:border-0 border-slate-100">
+              <div className="sm:col-span-4">
+                <label className="text-xs text-slate-500 block sm:hidden mb-1">Subject</label>
                 <input 
-                  className="input text-sm" 
+                  className="input text-sm w-full" 
                   value={item.subject}
                   onChange={e => updateItem(index, 'subject', e.target.value)}
-                  placeholder="Subject..."
+                  placeholder="Subject name..."
                   required
                 />
               </div>
-              <div className="col-span-2">
-                <label className="text-xs text-slate-500">Masters</label>
-                <input 
-                  type="number" min="1" className="input text-sm" 
-                  value={item.num_masters}
-                  onChange={e => updateItem(index, 'num_masters', e.target.value)}
-                />
+              <div className="grid grid-cols-3 sm:grid-cols-none sm:col-span-6 gap-2">
+                <div className="sm:col-span-2">
+                  <label className="text-xs text-slate-500 block sm:hidden mb-1">Masters</label>
+                  <input 
+                    type="number" min="1" className="input text-sm w-full" 
+                    value={item.num_masters}
+                    onChange={e => updateItem(index, 'num_masters', e.target.value)}
+                    placeholder="Masters"
+                  />
+                </div>
+                <div className="sm:col-span-3">
+                  <label className="text-xs text-slate-500 block sm:hidden mb-1">Type</label>
+                  <select className="input text-sm w-full" value={item.print_type} onChange={e => updateItem(index, 'print_type', e.target.value)}>
+                    <option value="1_side">1 Side</option>
+                    <option value="B_to_B">B to B</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-3">
+                  <label className="text-xs text-slate-500 block sm:hidden mb-1">Copies</label>
+                  <input 
+                    type="number" min="1" className="input text-sm w-full" 
+                    value={item.copies_per_master}
+                    onChange={e => updateItem(index, 'copies_per_master', e.target.value)}
+                    placeholder="Copies"
+                  />
+                </div>
               </div>
-              <div className="col-span-2">
-                <label className="text-xs text-slate-500">Type</label>
-                <select className="input text-sm" value={item.print_type} onChange={e => updateItem(index, 'print_type', e.target.value)}>
-                  <option value="1_side">1 Side</option>
-                  <option value="B_to_B">B to B</option>
-                </select>
-              </div>
-              <div className="col-span-2">
-                <label className="text-xs text-slate-500">Copies</label>
-                <input 
-                  type="number" min="1" className="input text-sm" 
-                  value={item.copies_per_master}
-                  onChange={e => updateItem(index, 'copies_per_master', e.target.value)}
-                />
-              </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2 flex justify-end sm:justify-start">
                 <button 
                   type="button" onClick={() => removeItem(index)}
-                  className="btn-ghost text-red-500 text-xs"
+                  className="btn-ghost text-red-500 text-xs py-2 px-3"
                   disabled={risoItems.length === 1}
                 >
                   Remove
@@ -285,7 +289,7 @@ export default function RisoForm() {
               </div>
             </div>
           ))}
-          <button type="button" onClick={addItem} className="btn-ghost text-xs gap-1 w-full justify-center">
+          <button type="button" onClick={addItem} className="btn-ghost text-xs gap-1 w-full justify-center py-2.5">
             + Add Subject
           </button>
         </div>
@@ -301,9 +305,9 @@ export default function RisoForm() {
         />
       </div>
 
-      <div className="flex gap-3 pt-2">
-        <Link href="/shop" className="btn-secondary flex-1">Cancel</Link>
-        <button type="submit" disabled={saving} className="btn-primary flex-1">
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-2">
+        <Link href="/shop" className="btn-secondary flex-1 py-3 sm:py-2 text-center">Cancel</Link>
+        <button type="submit" disabled={saving} className="btn-primary flex-1 py-3 sm:py-2 min-h-[48px]">
           {saving ? 'Submitting...' : 'Submit RISO Request'}
         </button>
       </div>

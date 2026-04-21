@@ -1,35 +1,76 @@
-import { createClient } from '@/lib/db/server'
-import { notFound, redirect } from 'next/navigation'
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
+import { createClient } from '@/lib/db/client'
 import TellerSlip from '@/app/shop/checkout/TellerSlip'
 import PrintStyles from '../../PrintStyles'
-import { ArrowLeft, Printer, Download } from 'lucide-react'
+import { ArrowLeft, Printer, Loader2 } from 'lucide-react'
 
-export default async function OrderSlipPage({ params }) {
-  const supabase = await createClient()
-  const { id } = await params
+export default function OrderSlipPage() {
+  const router = useRouter()
+  const params = useParams()
+  const id = params?.id
+  const [order, setOrder] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [unauthorized, setUnauthorized] = useState(false)
+  const supabase = createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  useEffect(() => {
+    async function loadOrder() {
+      if (!id) return
+      
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        router.push('/login')
+        return
+      }
 
-  const { data: order } = await supabase
-    .from('orders')
-    .select('*, user:user_id(*), items:order_items(*, item:item_id(*))')
-    .eq('order_id', id)
-    .single()
+      // Fetch order
+      const { data: orderData } = await supabase
+        .from('orders')
+        .select('*, user:user_id(*), items:order_items(*, item:item_id(*))')
+        .eq('order_id', id)
+        .single()
 
-  if (!order) notFound()
+      if (!orderData) {
+        router.push('/shop/orders')
+        return
+      }
 
-  // Security check: only owner or staff can view
-  const { data: currentUserProfile } = await supabase
-    .from('users')
-    .select('role_type, id_number')
-    .eq('auth_id', user.id)
-    .single()
+      // Security check
+      const { data: profile } = await supabase
+        .from('users')
+        .select('role_type, user_id')
+        .eq('auth_id', user.id)
+        .single()
 
-  const isStaff = ['bookstore_manager', 'bookstore_staff', 'working_student'].includes(currentUserProfile.role_type)
-  
-  if (order.user_id !== currentUserProfile.id_number && !isStaff) {
+      const isStaff = ['bookstore_manager', 'bookstore_staff', 'working_student'].includes(profile?.role_type)
+      
+      if (orderData.user_id !== profile?.user_id && !isStaff) {
+        setUnauthorized(true)
+        setLoading(false)
+        return
+      }
+
+      setOrder(orderData)
+      setLoading(false)
+    }
+
+    loadOrder()
+  }, [id, router, supabase])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="animate-spin text-brand-600" size={32} />
+      </div>
+    )
+  }
+
+  if (unauthorized) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
@@ -40,6 +81,8 @@ export default async function OrderSlipPage({ params }) {
       </div>
     )
   }
+
+  if (!order) return null
 
   return (
     <div className="min-h-screen bg-slate-100 py-12 px-4 print:bg-white print:p-0">
@@ -58,7 +101,7 @@ export default async function OrderSlipPage({ params }) {
             </button>
           </div>
         </div>
-        <TellerSlip order={order} user={order.user} items={order.items} />
+        <TellerSlip order={order} user={order?.user} items={order?.items} />
       </div>
     </div>
   )

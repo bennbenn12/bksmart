@@ -58,7 +58,7 @@ export default function LoginPage() {
              <img src="/images/booksmart-logo.png" alt="BookSmart" className="h-12 w-auto" />
           </div>
           <h1 className="font-display text-4xl text-white drop-shadow-md">BookSmart</h1>
-          <p className="text-white/80 text-sm mt-2 font-light tracking-wide">Holy Name University · Finance Office</p>
+          <p className="text-white/80 text-sm mt-2 font-light tracking-wide">Holy Name University </p>
         </div>
 
         <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl p-8 border border-white/50">
@@ -100,7 +100,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-white/60 text-xs mt-6">
-          © {new Date().getFullYear()} Holy Name University · BookSmart System v2.0
+          © {new Date().getFullYear()} Holy Name University · BookSmart System v1.0
         </p>
       </div>
     </div>

@@ -6,7 +6,7 @@ import { useRealtime } from '@/lib/useRealtime'
 import { useToast } from '@/components/providers/ToastProvider'
 import { formatDateTime, cn } from '@/lib/utils'
 import { Users, Clock, CheckCircle, AlertCircle, Loader2, ListOrdered, XCircle, Package } from 'lucide-react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 
 const today = () => new Date().toISOString().split('T')[0]
 
@@ -22,10 +22,12 @@ export default function StudentQueuePage() {
   const [preSelectedOrder, setPreSelectedOrder] = useState(null)
   const [notes, setNotes]         = useState('')
   const supabase = createClient()
+  const router = useRouter()
   const searchParams = useSearchParams()
   const preSelectedOrderId = searchParams.get('orderId')
 
-  const fetchQueue = useCallback(async () => {
+  const fetchQueue = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     const { data } = await supabase.from('queues')
       .select('queue_id,queue_number,status,user_id,created_at,notes')
       .eq('queue_date', today())
@@ -33,13 +35,13 @@ export default function StudentQueuePage() {
       .order('queue_number')
     const list = data || []
     setQueue(list)
-    setMyQueue(list.find(q=>q.user_id===profile?.id_number)||null)
+    setMyQueue(list.find(q=>q.user_id===profile?.user_id)||null)
     setLoading(false)
   }, [profile])
 
   const fetchOrders = useCallback(async () => {
     if (!profile) return
-    const { data } = await supabase.from('orders').select('order_id,order_number,status').eq('user_id',profile.id_number).in('status',['Pending','Ready']).order('created_at',{ascending:false})
+    const { data } = await supabase.from('orders').select('order_id,order_number,status').eq('user_id',profile.user_id).in('status',['Pending','Ready']).order('created_at',{ascending:false})
     setOrders(data||[])
     // If preSelectedOrderId exists, find and set it
     if (preSelectedOrderId && data) {
@@ -58,22 +60,25 @@ export default function StudentQueuePage() {
   useEffect(() => {
     if (myQueue?.status === 'Processing') {
       toast('🎉 It\'s your turn! Please proceed to the counter.', 'success', 8000)
+      router.refresh() // Refresh to show updated queue status
     }
-  }, [myQueue?.status])
+  }, [myQueue?.status, router])
 
   async function handleJoin() {
     setJoining(true)
     try {
-      const { data: existing } = await supabase.from('queues').select('queue_id').eq('user_id',profile.id_number).eq('queue_date',today()).in('status',['Waiting','Processing'])
+      const { data: existing } = await supabase.from('queues').select('queue_id').eq('user_id',profile.user_id).eq('queue_date',today()).in('status',['Waiting','Processing'])
       if (existing?.length > 0) { toast('You are already in the queue.','warning'); setJoining(false); return }
 
       // Get next queue number for today
       const { data: maxRow } = await supabase.from('queues').select('queue_number').eq('queue_date',today()).order('queue_number',{ascending:false}).limit(1).single()
       const nextNumber = (maxRow?.queue_number || 0) + 1
 
-      await supabase.from('queues').insert({ user_id:profile.id_number, order_id:selectedOrder||null, queue_number:nextNumber, status:'Waiting', queue_date:today(), notes:notes||'Walk-in service' })
+      await supabase.from('queues').insert({ user_id:profile.user_id, order_id:selectedOrder||null, queue_number:nextNumber, status:'Waiting', queue_date:today(), notes:notes||'Walk-in service' })
       toast(`You joined the queue! Your number is #${String(nextNumber).padStart(3,'0')}`,'success')
       setOrder(''); setNotes('')
+      await fetchQueue() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
     } catch(e) { toast(e.message,'error') } finally { setJoining(false) }
   }
 
@@ -83,6 +88,8 @@ export default function StudentQueuePage() {
     try {
       await supabase.from('queues').update({ status:'Completed', notes:'Cancelled by user' }).eq('queue_id',myQueue.queue_id)
       toast('You left the queue.','info')
+      await fetchQueue() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
     } catch(e) { toast(e.message,'error') } finally { setJoining(false) }
   }
 
@@ -104,23 +111,23 @@ export default function StudentQueuePage() {
 
       {/* Now Serving Board */}
       <div className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
-        <div className="bg-hnu-dark text-white p-6 text-center">
-          <p className="text-sm uppercase tracking-widest text-white/70 mb-2 font-bold">Now Serving</p>
+        <div className="bg-hnu-dark text-white p-4 sm:p-6 text-center">
+          <p className="text-xs sm:text-sm uppercase tracking-widest text-white/70 mb-2 font-bold">Now Serving</p>
           {processing ? (
             <div className="num-flip" key={processing.queue_number}>
-              <span className="text-6xl font-display font-bold">{String(processing.queue_number).padStart(3,'0')}</span>
-              {processing.user_id===profile?.id_number && <p className="text-hnu-gold font-bold mt-2 text-lg">🎉 It's your turn! Please proceed to the counter.</p>}
+              <span className="text-5xl sm:text-6xl font-display font-bold">{String(processing.queue_number).padStart(3,'0')}</span>
+              {processing.user_id===profile?.user_id && <p className="text-hnu-gold font-bold mt-2 text-base sm:text-lg animate-pulse">🎉 It's your turn! Please proceed to the counter.</p>}
             </div>
-          ) : <p className="text-4xl font-display text-white/50 py-2">— — —</p>}
+          ) : <p className="text-3xl sm:text-4xl font-display text-white/50 py-2">— — —</p>}
         </div>
 
-        <div className="p-6 grid grid-cols-2 gap-6 text-center divide-x divide-slate-100">
-          <div><p className="text-xs uppercase font-bold text-slate-400 mb-1">Waiting</p><p className="text-2xl font-bold text-slate-700">{waiting.length}</p></div>
+        <div className="p-4 sm:p-6 grid grid-cols-2 gap-4 sm:gap-6 text-center divide-x divide-slate-100">
+          <div><p className="text-xs uppercase font-bold text-slate-400 mb-1">Waiting</p><p className="text-xl sm:text-2xl font-bold text-slate-700">{waiting.length}</p></div>
           <div>
             <p className="text-xs uppercase font-bold text-slate-400 mb-1">Your Position</p>
             {myQueue ? (
               <div>
-                <p className={cn('text-xl font-bold',myQueue.status==='Processing'?'text-green-600':'text-brand-600')}>#{String(myQueue.queue_number).padStart(3,'0')}</p>
+                <p className={cn('text-lg sm:text-xl font-bold',myQueue.status==='Processing'?'text-green-600':'text-brand-600')}>#{String(myQueue.queue_number).padStart(3,'0')}</p>
                 {myQueue.status==='Waiting' && <p className="text-xs text-slate-500 mt-0.5">{position===1?'You are next!':position>1?`${position-1} ahead`:''}</p>}
                 {myQueue.status==='Processing' && <p className="text-xs text-green-600 mt-0.5 font-bold">Go to counter!</p>}
               </div>
@@ -130,18 +137,18 @@ export default function StudentQueuePage() {
       </div>
 
       {/* Queue grid */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
-        <h3 className="font-bold text-slate-700 mb-3 text-sm">Queue Board</h3>
-        <div className="grid grid-cols-8 gap-2">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-3 sm:p-4">
+        <h3 className="font-bold text-slate-700 mb-2 sm:mb-3 text-sm">Queue Board</h3>
+        <div className="grid grid-cols-5 sm:grid-cols-8 gap-1.5 sm:gap-2">
           {queue.map(q=>(
-            <div key={q.queue_id} className={cn('aspect-square rounded-xl flex items-center justify-center text-sm font-bold border-2',
+            <div key={q.queue_id} className={cn('aspect-square rounded-lg sm:rounded-xl flex items-center justify-center text-xs sm:text-sm font-bold border-2',
               q.status==='Processing'?'bg-hnu-dark text-white border-hnu-dark scale-105 shadow-md':
-              q.user_id===profile?.id_number?'bg-yellow-100 text-yellow-700 border-yellow-400':
+              q.user_id===profile?.user_id?'bg-yellow-100 text-yellow-700 border-yellow-400':
               'bg-slate-50 text-slate-500 border-slate-100')}>
               {String(q.queue_number).padStart(3,'0')}
             </div>
           ))}
-          {queue.length===0 && <p className="col-span-8 text-center text-slate-400 text-sm py-4">Queue is empty today.</p>}
+          {queue.length===0 && <p className="col-span-5 sm:col-span-8 text-center text-slate-400 text-sm py-4">Queue is empty today.</p>}
         </div>
       </div>
 

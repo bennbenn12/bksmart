@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import { Modal, Alert, LoadingSpinner, EmptyState, Badge, Pagination, ConfirmDialog } from '@/components/ui'
 import { createClient } from '@/lib/db/client'
@@ -8,7 +8,7 @@ import { useAuth } from '@/components/providers/AuthProvider'
 import { useRealtime } from '@/lib/useRealtime'
 import { useToast } from '@/components/providers/ToastProvider'
 import { ORDER_STATUS_COLORS, formatCurrency, formatDateTime, CATEGORIES, SHOPS, shopLabel, cn, needsSize, CLOTHING_SIZES } from '@/lib/utils'
-import { ShoppingCart, Plus, Search, Eye, CheckCircle, Package, Trash2, Minus, Loader2, X, RefreshCw, Hash, Copy, CreditCard, AlertTriangle, CheckSquare, Square } from 'lucide-react'
+import { ShoppingCart, Plus, Search, Eye, CheckCircle, Package, Trash2, Minus, Loader2, X, RefreshCw, Hash, Copy, CreditCard, AlertTriangle, CheckSquare, Square, Printer } from 'lucide-react'
 import Link from 'next/link'
 import { sendOrderStatusEmail } from '@/app/actions/email'
 
@@ -33,6 +33,7 @@ export default function OrdersPage() {
   const [showBulkModal, setShowBulkModal] = useState(false)
   const PAGE = 10
   const supabase = createClient()
+  const router = useRouter()
   const isStaff = ['bookstore_manager','bookstore_staff','working_student'].includes(profile?.role_type)
   const searchParams = useSearchParams()
   const highlightOrderId = searchParams.get('highlight')
@@ -53,13 +54,13 @@ export default function OrdersPage() {
     }
   }, [highlightOrderId, orders])
 
-  const fetchOrders = useCallback(async () => {
-    setLoading(true)
+  const fetchOrders = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     let q = supabase.from('orders')
       .select('*, user:user_id(first_name,last_name,id_number), items:order_items(order_item_id,quantity,unit_price,item:item_id(name,category,image_url)), payments:payments(payment_id,verified_at,amount)', {count:'exact'})
       .order('created_at',{ascending:false})
       .range((page-1)*PAGE, page*PAGE-1)
-    if (!isStaff) q = q.eq('user_id', profile.id_number)
+    if (!isStaff) q = q.eq('user_id', profile.user_id)
     if (statusFilter) q = q.eq('status', statusFilter)
     if (search) q = q.ilike('order_number', `%${search}%`)
     const { data, count } = await q
@@ -87,7 +88,7 @@ export default function OrdersPage() {
           return
         }
       }
-      const updates = { status, ...(status==='Released'?{released_at:new Date().toISOString(), processed_by:profile.id_number}:{}), ...(status==='Cancelled' && reason ? { notes: reason } : {}) }
+      const updates = { status, ...(status==='Released'?{released_at:new Date().toISOString(), processed_by:profile.user_id}:{}), ...(status==='Cancelled' && reason ? { notes: reason } : {}) }
       await supabase.from('orders').update(updates).eq('order_id', id)
 
       // On release: deduct actual stock and release reserved quantity
@@ -200,7 +201,8 @@ export default function OrdersPage() {
       toast(`Order marked as ${status}`, 'success')
       if (viewOrder?.order_id === id) setViewOrder(o => ({...o, status, ...(reason ? { notes: reason } : {})}))
       setCancelTarget(null)
-      fetchOrders()
+      await fetchOrders() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
     } catch(e) { toast(e.message,'error') } finally { setActing(false) }
   }
 
@@ -214,7 +216,8 @@ export default function OrdersPage() {
       await supabase.from('orders').update({ transaction_id: refNumber }).eq('order_id', order.order_id)
       toast(`Reference # generated: ${refNumber}`, 'success')
       setViewOrder(o => o ? {...o, transaction_id: refNumber} : o)
-      fetchOrders()
+      await fetchOrders() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
     } catch(e) { toast(e.message,'error') } finally { setActing(false) }
   }
 
@@ -258,6 +261,8 @@ export default function OrdersPage() {
       toast(`Updated ${successCount} of ${selectedOrders.length} orders to ${bulkAction}`, 'success')
       setSelectedOrders([])
       setBulkAction('')
+      await fetchOrders() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
     } catch (error) {
       toast('Bulk operation failed', 'error')
     } finally {
@@ -398,6 +403,7 @@ export default function OrdersPage() {
                         {isStaff && o.status==='Ready' && isPaid(o) && <button disabled={acting} onClick={()=>updateStatus(o.order_id,'Released')} className="btn-primary py-1 px-2 text-xs bg-green-600 hover:bg-green-700">Release</button>}
                         {isStaff && o.status==='Ready' && !isPaid(o) && <Link href={`/payments?orderId=${o.order_id}`} className="btn-primary py-1 px-2 text-xs bg-orange-500 hover:bg-orange-600 inline-flex items-center gap-1"><CreditCard size={11}/> Record Payment</Link>}
                         {isStaff && (o.status==='Pending'||o.status==='Ready') && <button disabled={acting} onClick={()=>openCancelModal(o.order_id)} className="btn-ghost py-1 px-2 text-xs text-red-500">Cancel</button>}
+                        {isStaff && o.status==='Released' && <button onClick={()=>window.open(`/print-receipt?orderId=${o.order_id}`, '_blank', 'width=800,height=600')} className="btn-primary py-1 px-2 text-xs bg-blue-600 hover:bg-blue-700 inline-flex items-center gap-1"><Printer size={11}/> Receipt</button>}
                       </div>
                     </td>
                   </tr>
@@ -540,11 +546,13 @@ export default function OrdersPage() {
                 {viewOrder.status==='Ready' && isPaid(viewOrder) && <button disabled={acting} onClick={()=>updateStatus(viewOrder.order_id,'Released')} className="btn-primary bg-green-600 hover:bg-green-700">Release Order</button>}
                 {viewOrder.status==='Ready' && !isPaid(viewOrder) && <Link href={`/payments?orderId=${viewOrder.order_id}`} className="btn-primary bg-orange-500 hover:bg-orange-600 inline-flex items-center gap-1"><CreditCard size={14}/> Record Payment</Link>}
                 {(viewOrder.status==='Pending'||viewOrder.status==='Ready') && <button disabled={acting} onClick={()=>{setViewOrder(null);openCancelModal(viewOrder.order_id)}} className="btn-danger">Cancel Order</button>}
+                {viewOrder.status==='Released' && <button onClick={()=>window.open(`/print-receipt?orderId=${viewOrder.order_id}`, '_blank', 'width=800,height=600')} className="btn-primary bg-blue-600 hover:bg-blue-700 inline-flex items-center gap-1"><Printer size={14}/> Print Receipt</button>}
               </div>
             )}
           </div>
         </Modal>
       )}
+
 
       {/* Bulk Operations Modal */}
       {showBulkModal && (
@@ -610,7 +618,7 @@ function CreateOrderModal({ onClose, onCreated }) {
     setStudentSearch(q)
     if (q.length < 2) { setStudents([]); return }
     setLoadingStudents(true)
-    const { data } = await supabase.from('users').select('id_number,first_name,last_name,role_type').ilike('id_number', `%${q}%`).limit(10)
+    const { data } = await supabase.from('users').select('user_id,id_number,first_name,last_name,role_type').ilike('id_number', `%${q}%`).limit(10)
     setStudents(data || [])
     setLoadingStudents(false)
   }
@@ -647,7 +655,7 @@ function CreateOrderModal({ onClose, onCreated }) {
     try {
       const { generateOrderNumber } = await import('@/lib/utils')
       const { data: order, error: orderErr } = await supabase.from('orders').insert({
-        user_id: selectedStudent.id_number,
+        user_id: selectedStudent.user_id,
         total_amount: cartTotal,
         status: 'Pending',
         order_number: generateOrderNumber(),
@@ -668,7 +676,7 @@ function CreateOrderModal({ onClose, onCreated }) {
       }
 
       // Notify the student
-      await supabase.from('notifications').insert({ user_id:selectedStudent.id_number, title:'Order Placed', message:`Your order #${order.order_number} has been placed. Total: ₱${cartTotal.toFixed(2)}`, type:'info', reference_type:'order', reference_id:order.order_id })
+      await supabase.from('notifications').insert({ user_id:selectedStudent.user_id, title:'Order Placed', message:`Your order #${order.order_number} has been placed. Total: ₱${cartTotal.toFixed(2)}`, type:'info', reference_type:'order', reference_id:order.order_id })
 
       toast(`Order ${order.order_number} created!`, 'success')
       onCreated()

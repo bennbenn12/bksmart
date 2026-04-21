@@ -1,0 +1,382 @@
+/* Print Styles for BookSmart - Optimized for A4, Letter, and Long Bond Paper (8.5" x 13") */
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+  
+  /* Long Bond Paper (8.5" x 13") - Philippine standard */
+  @page long-bond {
+    size: 8.5in 13in;
+    margin: 0.5in;
+  }
+  
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  
+  body {
+    background: white !important;
+    font-size: 10pt;
+    line-height: 1.3;
+  }
+  
+  /* Hide non-print elements - NOTE: header is NOT hidden so HNU letterhead shows */
+  .no-print,
+  button:not(.print-only),
+  nav,
+  aside,
+  .sidebar,
+  .mobile-nav,
+  .floating-action,
+  .toast-container,
+  .modal-backdrop {
+    display: none !important;
+  }
+  
+  /* Show print-only elements */
+  .print-only {
+    display: block !important;
+  }
+  
+  .print-only-inline {
+    display: inline !important;
+  }
+  
+  .print-only-flex {
+    display: flex !important;
+  }
+  
+  /* Container adjustments */
+  .print-container {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  
+  /* Page break utilities */
+  .page-break {
+    page-break-before: always;
+  }
+  
+  .page-break-after {
+    page-break-after: always;
+  }
+  
+  .no-page-break {
+    page-break-inside: avoid;
+  }
+  
+  /* Table styling for print */
+  table.print-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9pt;
+  }
+  
+  table.print-table th,
+  table.print-table td {
+    border: 1px solid #333;
+    padding: 6px 8px;
+    text-align: left;
+  }
+  
+  table.print-table th {
+    background-color: #f0f0f0 !important;
+    font-weight: bold;
+  }
+  
+  /* Report specific styles */
+  .report-header {
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #333;
+  }
+  
+  .report-header h1 {
+    font-size: 16pt;
+    font-weight: bold;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+  }
+  
+  .report-header h2 {
+    font-size: 12pt;
+    font-weight: normal;
+    margin-bottom: 3px;
+  }
+  
+  .report-meta {
+    font-size: 9pt;
+    color: #666;
+    margin-top: 10px;
+  }
+  
+  .report-section {
+    margin-bottom: 20px;
+  }
+  
+  .report-section-title {
+    font-size: 11pt;
+    font-weight: bold;
+    border-bottom: 1px solid #333;
+    padding-bottom: 5px;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+  }
+  
+  /* Summary boxes */
+  .print-summary-box {
+    border: 1px solid #333;
+    padding: 10px;
+    margin-bottom: 15px;
+    background-color: #f9f9f9 !important;
+  }
+  
+  .print-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+    margin-bottom: 20px;
+  }
+  
+  .print-summary-item {
+    text-align: center;
+    padding: 10px;
+    border: 1px solid #ccc;
+  }
+  
+  .print-summary-label {
+    font-size: 8pt;
+    color: #666;
+    text-transform: uppercase;
+  }
+  
+  .print-summary-value {
+    font-size: 14pt;
+    font-weight: bold;
+    margin-top: 5px;
+  }
+  
+  /* Receipt/Slip specific */
+  .receipt-container {
+    width: 100%;
+    max-width: 80mm; /* Thermal receipt width */
+    margin: 0 auto;
+    font-family: 'Courier New', monospace;
+    font-size: 9pt;
+  }
+  
+  .receipt-container.wide {
+    max-width: 100%;
+  }
+  
+  .receipt-header {
+    text-align: center;
+    margin-bottom: 15px;
+  }
+  
+  .receipt-header h1 {
+    font-size: 12pt;
+    font-weight: bold;
+    margin-bottom: 3px;
+  }
+  
+  .receipt-divider {
+    border-top: 1px dashed #333;
+    margin: 10px 0;
+  }
+  
+  .receipt-divider.double {
+    border-top: 2px solid #333;
+    border-bottom: 1px solid #333;
+    height: 3px;
+  }
+  
+  .receipt-line {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 3px;
+  }
+  
+  .receipt-line.bold {
+    font-weight: bold;
+  }
+  
+  .receipt-total {
+    font-size: 11pt;
+    font-weight: bold;
+    border-top: 1px solid #333;
+    border-bottom: 1px solid #333;
+    padding: 5px 0;
+    margin: 10px 0;
+  }
+  
+  .receipt-footer {
+    text-align: center;
+    margin-top: 20px;
+    font-size: 8pt;
+  }
+  
+  /* Signatures */
+  .signature-section {
+    margin-top: 30px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 40px;
+  }
+  
+  .signature-box {
+    text-align: center;
+  }
+  
+  .signature-line {
+    border-top: 1px solid #333;
+    margin-top: 30px;
+    padding-top: 5px;
+    font-size: 9pt;
+  }
+  
+  /* OR Log specific */
+  .or-log-table {
+    font-size: 8pt;
+  }
+  
+  .or-log-table th {
+    background-color: #e0e0e0 !important;
+  }
+  
+  /* Grid layouts for reports */
+  .report-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+  }
+  
+  /* Barcode styling */
+  .barcode {
+    font-family: 'Libre Barcode 39', 'Courier New', monospace;
+    font-size: 24pt;
+    text-align: center;
+    margin: 10px 0;
+  }
+  
+  /* Watermark for draft reports */
+  .draft-watermark {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-45deg);
+    font-size: 72pt;
+    color: rgba(200, 200, 200, 0.3);
+    z-index: -1;
+    pointer-events: none;
+  }
+  
+  /* Long Bond Paper (8.5" x 13") specific styles */
+  .long-bond-paper {
+    page: long-bond;
+    font-family: Arial, "Helvetica Neue", sans-serif;
+    font-size: 10pt;
+    line-height: 1.3;
+  }
+  
+  /* Tailwind print: utility classes */
+  .print\:p-0 {
+    padding: 0 !important;
+  }
+  .print\:max-w-none {
+    max-width: none !important;
+  }
+  .print\:w-full {
+    width: 100% !important;
+  }
+  .print\:bg-white {
+    background: white !important;
+  }
+  
+  /* Prevent content duplication in print */
+  .print-content {
+    page-break-before: avoid;
+    page-break-after: avoid;
+  }
+  
+  /* Hide main page when print modal is active */
+  .print-mode,
+  .hide-for-print {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  
+  /* Force show print container - highest priority */
+  .print-container,
+  body .print-container,
+  html body .print-container {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+  }
+  
+  /* Ensure print content is visible */
+  .print-content {
+    display: block !important;
+    visibility: visible !important;
+  }
+  
+  /* Force single page instance */
+  .print-single {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  
+  .long-bond-paper .paper-container {
+    width: 7.5in;
+    max-width: 7.5in;
+    margin: 0 auto;
+  }
+  
+  /* Table row break prevention for Long Bond */
+  .long-bond-paper table {
+    page-break-inside: auto;
+  }
+  
+  .long-bond-paper tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  
+  .long-bond-paper thead {
+    display: table-header-group;
+  }
+  
+  .long-bond-paper tfoot {
+    display: table-footer-group;
+  }
+  
+  /* Zebra striping that works in print */
+  .long-bond-paper .table-striped tbody tr:nth-child(even) {
+    background-color: #f5f5f5 !important;
+  }
+  
+  /* Signature section stays together */
+  .long-bond-paper .signature-section {
+    page-break-inside: avoid;
+    margin-top: 0.5in;
+  }
+}
+
+/* Print button styles (visible on screen only) */
+@media screen {
+  .print-only,
+  .print-only-inline,
+  .print-only-flex {
+    display: none !important;
+  }
+}

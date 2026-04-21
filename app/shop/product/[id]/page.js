@@ -35,59 +35,63 @@ export default async function ProductPage({ params }) {
         <span className="text-slate-800 font-medium truncate max-w-[200px]">{item.name}</span>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-12">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-8 sm:mb-12">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-0 md:gap-8">
           {/* Image Section */}
-          <div className="bg-slate-50 p-8 flex items-center justify-center border-b md:border-b-0 md:border-r border-slate-100 relative group">
+          <div className="bg-slate-50 p-4 sm:p-8 flex items-center justify-center border-b md:border-b-0 md:border-r border-slate-100 relative group">
             <ImageGallery images={images} name={item.name} />
             
-            <div className="absolute top-4 right-4 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+            <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex flex-col gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-10">
               <button className="p-2 bg-white rounded-full shadow-md text-slate-400 hover:text-red-500 transition-colors">
-                <Heart size={20} />
+                <Heart size={18} className="sm:w-5 sm:h-5" />
               </button>
-              <button className="p-2 bg-white rounded-full shadow-md text-slate-400 hover:text-blue-500 transition-colors">
-                <Share2 size={20} />
+              <button className="p-2 bg-white rounded-full shadow-md text-slate-400 hover:text-blue-500 transition-colors hidden sm:block">
+                <Share2 size={18} className="sm:w-5 sm:h-5" />
               </button>
             </div>
           </div>
 
           {/* Details Section */}
-          <div className="p-8 flex flex-col">
-            <div className="mb-6">
-              <div className="flex items-center gap-2 mb-2">
-                 <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-bold uppercase tracking-wider">{item.category}</span>
+          <div className="p-4 sm:p-8 flex flex-col">
+            <div className="mb-4 sm:mb-6">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                 <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-bold uppercase tracking-wider">{item.category}</span>
                  {(item.stock_quantity - (item.reserved_quantity || 0)) > 0 ? (
-                   <span className="px-2.5 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-bold uppercase tracking-wider">
+                   <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-bold uppercase tracking-wider">
                      {(item.stock_quantity - (item.reserved_quantity || 0)) <= 10 ? `Only ${item.stock_quantity - (item.reserved_quantity || 0)} left` : 'In Stock'}
                    </span>
+                 ) : item.allow_preorder ? (
+                   <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold uppercase tracking-wider">
+                     Pre-order
+                   </span>
                  ) : (
-                   <span className="px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-bold uppercase tracking-wider">Out of Stock</span>
+                   <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-bold uppercase tracking-wider">Out of Stock</span>
                  )}
               </div>
-              <h1 className="text-3xl md:text-4xl font-display font-bold text-slate-900 mb-2 leading-tight">{item.name}</h1>
-              <p className="text-slate-500 text-sm">SKU: {item.sku}</p>
+              <h1 className="text-xl sm:text-3xl md:text-4xl font-display font-bold text-slate-900 mb-1 sm:mb-2 leading-tight">{item.name}</h1>
+              <p className="text-slate-500 text-xs sm:text-sm">SKU: {item.sku}</p>
             </div>
 
-            <div className="flex items-baseline gap-1 mb-6 pb-6 border-b border-slate-100">
-              <span className="text-lg text-hnu-gold font-bold">₱</span>
-              <span className="text-4xl font-bold text-hnu-dark">{item.price}</span>
+            <div className="flex items-baseline gap-1 mb-4 sm:mb-6 pb-4 sm:pb-6 border-b border-slate-100">
+              <span className="text-base sm:text-lg text-hnu-gold font-bold">₱</span>
+              <span className="text-2xl sm:text-4xl font-bold text-hnu-dark">{item.price}</span>
             </div>
 
-            <div className="prose prose-slate prose-sm mb-8 text-slate-600 leading-relaxed">
+            <div className="prose prose-slate prose-sm mb-6 sm:mb-8 text-slate-600 leading-relaxed">
               <p>{item.description || 'No description available for this item.'}</p>
             </div>
 
             <div className="mt-auto">
                <AddToCartButton item={item} />
                
-               <div className="mt-6 flex items-center gap-4 text-xs text-slate-500">
+               <div className="mt-4 sm:mt-6 flex items-center gap-3 sm:gap-4 text-[10px] sm:text-xs text-slate-500">
                  <div className="flex items-center gap-1">
-                   <div className="w-4 h-4 rounded-full bg-green-100 text-green-600 flex items-center justify-center">✓</div>
-                   <span>Official HNU Merchandise</span>
+                   <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-[8px] sm:text-xs">✓</div>
+                   <span>Official HNU</span>
                  </div>
                  <div className="flex items-center gap-1">
-                   <div className="w-4 h-4 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">🛡️</div>
-                   <span>Secure Payment</span>
+                   <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[8px] sm:text-xs">🛡️</div>
+                   <span>Secure</span>
                  </div>
                </div>
             </div>
@@ -110,7 +114,7 @@ export default async function ProductPage({ params }) {
               <Link href={`/shop/product/${rel.item_id}`} key={rel.item_id} className="bg-white p-3 rounded-xl shadow-sm hover:shadow-md transition-all border border-slate-100 group">
                  <div className="aspect-square bg-slate-50 rounded-lg mb-3 overflow-hidden">
                     {rel.image_url ? (
-                      <img src={rel.image_url} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                      <img src={rel.image_url.split(',')[0].trim()} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-slate-300 text-2xl">📖</div>
                     )}

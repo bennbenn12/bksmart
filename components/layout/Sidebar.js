@@ -35,7 +35,7 @@ export default function Sidebar() {
         {!collapsed && (
           <div className="min-w-0">
             <p className="font-display text-[17px] text-white leading-none truncate">BookSmart</p>
-            <p className="text-[10px] text-brand-400 mt-0.5 truncate">HNU Finance Office</p>
+            <p className="text-[10px] text-brand-400 mt-0.5 truncate">HNU Bookstore</p>
           </div>
         )}
       </div>

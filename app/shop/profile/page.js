@@ -19,7 +19,7 @@ export default async function ProfilePage() {
   // This is the ONLY sequential step — everything else is parallel below
   const { data: profile } = await supabase
     .from('users')
-    .select('id_number, first_name, last_name, email, id_type, contact_number, role_type, created_at')
+    .select('user_id, id_number, first_name, last_name, email, id_type, contact_number, role_type, created_at')
     .eq('auth_id', user.id)
     .single()
 
@@ -34,20 +34,20 @@ export default async function ProfilePage() {
     supabase
       .from('orders')
       .select('order_id, order_number, status, total_amount, created_at, items:order_items(count)')
-      .eq('user_id', profile.id_number)
+      .eq('user_id', profile.user_id)
       .order('created_at', { ascending: false })
       .limit(5),
     supabase
       .from('appointments')
       .select('appointment_id, schedule_date, time_slot, status, order:order_id(order_number, order_items(quantity, bookstore_items(name)))')
-      .eq('user_id', profile.id_number)
+      .eq('user_id', profile.user_id)
       .gte('schedule_date', today)
       .order('schedule_date')
       .limit(3),
     supabase
       .from('queues')
       .select('queue_id, queue_number, status, user_id')
-      .eq('user_id', profile.id_number)
+      .eq('user_id', profile.user_id)
       .eq('queue_date', today)
       .in('status', ['Waiting', 'Processing'])
       .limit(1),
@@ -60,37 +60,37 @@ export default async function ProfilePage() {
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Profile header */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="h-20 bg-gradient-to-r from-hnu-dark to-brand-700" />
-        <div className="px-6 pb-5">
-          <div className="flex items-end gap-4 -mt-8 mb-4">
-            <div className="w-16 h-16 rounded-2xl bg-hnu-gold flex items-center justify-center font-display text-2xl font-black text-hnu-dark border-4 border-white shadow-lg shrink-0">
+        <div className="h-16 sm:h-20 bg-gradient-to-r from-hnu-dark to-brand-700" />
+        <div className="px-4 sm:px-6 pb-5">
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4 -mt-6 sm:-mt-8 mb-4">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-hnu-gold flex items-center justify-center font-display text-xl sm:text-2xl font-black text-hnu-dark border-4 border-white shadow-lg shrink-0">
               {initials}
             </div>
-            <div className="pb-1">
-              <h2 className="font-display text-xl font-bold text-slate-800">{profile.first_name} {profile.last_name}</h2>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="font-mono text-sm font-bold text-brand-700">{profile.id_number || '—'}</span>
+            <div className="pb-0 sm:pb-1 flex-1 min-w-0">
+              <h2 className="font-display text-lg sm:text-xl font-bold text-slate-800">{profile.first_name} {profile.last_name}</h2>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                <span className="font-mono text-xs sm:text-sm font-bold text-brand-700">{profile.id_number || '—'}</span>
                 {profile.role_type === 'parent' && profile.id_type && <span className="text-[10px] text-slate-400 uppercase">({profile.id_type})</span>}
                 <span className="text-xs font-semibold bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full">
                   {ROLE_LABELS[profile.role_type] || profile.role_type}
                 </span>
               </div>
             </div>
-            <div className="ml-auto flex items-center gap-2 pb-1">
+            <div className="flex items-center gap-2 sm:pb-1">
               <EditProfileButton profile={profile} />
               <SignOutButton />
             </div>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 text-sm">
             {[
               { label: 'Email',        value: profile.email },
-              { label: profile.id_type || 'ID Number', value: profile.id_number || '—' },
+              { label: profile.id_type || 'ID', value: profile.id_number || '—' },
               { label: 'Contact',      value: profile.contact_number || '—' },
-              { label: 'Member Since', value: formatDate(profile.created_at) },
+              { label: 'Since', value: formatDate(profile.created_at) },
             ].map(({ label, value }) => (
-              <div key={label} className="bg-slate-50 rounded-xl p-3">
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">{label}</p>
-                <p className="font-medium text-slate-700 mt-0.5 truncate text-xs">{value}</p>
+              <div key={label} className="bg-slate-50 rounded-xl p-2.5 sm:p-3">
+                <p className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-wide">{label}</p>
+                <p className="font-medium text-slate-700 mt-0.5 truncate text-xs sm:text-sm">{value}</p>
               </div>
             ))}
           </div>
@@ -98,17 +98,17 @@ export default async function ProfilePage() {
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
         {[
           { 
-            label: 'Active Orders', 
+            label: 'Orders', 
             value: orders?.filter(o => ['Pending', 'Ready'].includes(o.status)).length || 0,
             icon: Package,
             color: 'text-brand-600',
             bg: 'bg-brand-50'
           },
           { 
-            label: 'Ready for Pickup', 
+            label: 'Ready', 
             value: orders?.filter(o => o.status === 'Ready').length || 0,
             icon: CheckCircle,
             color: 'text-green-600',
@@ -116,15 +116,15 @@ export default async function ProfilePage() {
             highlight: true
           },
           { 
-            label: 'Upcoming Appts', 
+            label: 'Appts', 
             value: appointments?.length || 0,
             icon: Calendar,
             color: 'text-purple-600',
             bg: 'bg-purple-50'
           },
           { 
-            label: 'Queue Position', 
-            value: activeQueue ? (activeQueue.status === 'Processing' ? 'NOW!' : `#${String(activeQueue.queue_number).padStart(3, '0')}`) : 'Not in queue',
+            label: 'Queue', 
+            value: activeQueue ? (activeQueue.status === 'Processing' ? 'NOW!' : `#${String(activeQueue.queue_number).padStart(3, '0')}`) : '—',
             icon: ListOrdered,
             color: activeQueue?.status === 'Processing' ? 'text-green-600' : 'text-orange-600',
             bg: activeQueue?.status === 'Processing' ? 'bg-green-50' : 'bg-orange-50'
@@ -132,42 +132,43 @@ export default async function ProfilePage() {
         ].map(stat => (
           <Link 
             key={stat.label} 
-            href={stat.label === 'Active Orders' ? '/shop/orders' : stat.label === 'Ready for Pickup' ? '/shop/orders?filter=ready' : stat.label === 'Upcoming Appts' ? '/shop/appointments' : '/shop/queue'}
+            href={stat.label === 'Orders' ? '/shop/orders' : stat.label === 'Ready' ? '/shop/orders?filter=ready' : stat.label === 'Appts' ? '/shop/appointments' : '/shop/queue'}
             className={cn(
-              'rounded-xl p-4 border transition-all hover:shadow-md',
+              'rounded-xl p-3 sm:p-4 border transition-all hover:shadow-md',
               stat.bg,
-              stat.highlight ? 'border-green-200 ring-2 ring-green-100' : 'border-slate-100'
+              stat.highlight ? 'border-green-200 ring-1 sm:ring-2 ring-green-100' : 'border-slate-100'
             )}
           >
-            <div className="flex items-center gap-2 mb-2">
-              <stat.icon size={16} className={stat.color} />
-              <span className="text-xs text-slate-500 font-medium">{stat.label}</span>
+            <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
+              <stat.icon size={14} className={stat.color} />
+              <span className="text-[10px] sm:text-xs text-slate-500 font-medium">{stat.label}</span>
             </div>
-            <p className={cn('font-display text-2xl font-bold', stat.color)}>{stat.value}</p>
+            <p className={cn('font-display text-xl sm:text-2xl font-bold', stat.color)}>{stat.value}</p>
           </Link>
         ))}
       </div>
 
       {/* Ready Orders Alert */}
       {orders?.some(o => o.status === 'Ready') && (
-        <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-5 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
-            <CheckCircle size={24} className="text-green-600" />
+        <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
+            <CheckCircle size={20} className="sm:hidden text-green-600" />
+            <CheckCircle size={24} className="hidden sm:block text-green-600" />
           </div>
           <div className="flex-1">
-            <p className="font-bold text-green-800">
+            <p className="font-bold text-green-800 text-sm sm:text-base">
               {orders.filter(o => o.status === 'Ready').length} order(s) ready for pickup!
             </p>
-            <p className="text-sm text-green-700">
+            <p className="text-xs sm:text-sm text-green-700">
               Join the queue or book an appointment to pick up your items.
             </p>
           </div>
           <div className="flex gap-2">
-            <Link href="/shop/queue" className="btn-primary bg-green-600 hover:bg-green-700 text-sm">
+            <Link href="/shop/queue" className="btn-primary bg-green-600 hover:bg-green-700 text-sm py-2.5 sm:py-2">
               Join Queue
             </Link>
-            <Link href="/shop/appointments" className="btn-secondary text-sm">
-              Book Appt
+            <Link href="/shop/appointments" className="btn-secondary text-sm py-2.5 sm:py-2">
+              Book
             </Link>
           </div>
         </div>
@@ -176,23 +177,23 @@ export default async function ProfilePage() {
       {/* Active queue banner */}
       {activeQueue && (
         <div className={cn(
-          'rounded-2xl p-5 border-2 flex items-center gap-4',
+          'rounded-2xl p-4 sm:p-5 border-2 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4',
           activeQueue.status === 'Processing' ? 'border-green-400 bg-green-50 animate-pulse' : 'border-brand-300 bg-brand-50'
         )}>
           <div className={cn(
-            'w-14 h-14 rounded-xl flex items-center justify-center font-display text-2xl font-black shrink-0',
+            'w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center font-display text-xl sm:text-2xl font-black shrink-0',
             activeQueue.status === 'Processing' ? 'bg-green-500 text-white' : 'bg-brand-600 text-white'
           )}>
             {String(activeQueue.queue_number).padStart(3, '0')}
           </div>
           <div className="flex-1">
             {activeQueue.status === 'Processing'
-              ? <p className="font-black text-green-700 text-lg">🎉 It's your turn! Go to the counter now.</p>
-              : <><p className="font-bold text-brand-700">You're in queue — #{String(activeQueue.queue_number).padStart(3, '0')}</p>
-                <p className="text-sm text-brand-600">Wait for your number to be called</p></>
+              ? <p className="font-black text-green-700 text-base sm:text-lg">🎉 It's your turn! Go to the counter now.</p>
+              : <><p className="font-bold text-brand-700 text-sm sm:text-base">You're in queue — #{String(activeQueue.queue_number).padStart(3, '0')}</p>
+                <p className="text-xs sm:text-sm text-brand-600">Wait for your number to be called</p></>
             }
           </div>
-          <Link href="/shop/queue" className="btn-primary text-sm shrink-0">View Queue</Link>
+          <Link href="/shop/queue" className="btn-primary text-sm shrink-0 py-2.5 sm:py-2 self-start sm:self-auto">View Queue</Link>
         </div>
       )}
 

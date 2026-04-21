@@ -13,15 +13,16 @@ export default async function ShopPage() {
     supabase
       .from('bookstore_items')
       // Only select columns the UI actually uses — avoids transferring description, image_url bloat
-      .select('item_id, name, price, stock_quantity, reserved_quantity, category, shop, image_url')
+      .select('item_id, name, price, stock_quantity, reserved_quantity, allow_preorder, preorder_eta_days, category, shop, image_url')
       .eq('is_active', true)
-      .gt('stock_quantity', 0)   // only show in-stock on homepage
+      .or('stock_quantity.gt.0,allow_preorder.eq.1')   // show in-stock OR allow pre-order
       .order('created_at', { ascending: false })
       .limit(20),
     supabase
       .from('bookstore_items')
-      .select('item_id, name, price, stock_quantity, reserved_quantity, category, image_url')
+      .select('item_id, name, price, stock_quantity, reserved_quantity, allow_preorder, category, image_url')
       .eq('is_active', true)
+      .or('stock_quantity.gt.0,allow_preorder.eq.1')
       .order('stock_quantity', { ascending: false })
       .limit(5),
   ])
@@ -58,15 +59,15 @@ export default async function ShopPage() {
       <ActiveOrdersPreview />
 
       {/* Category grid */}
-      <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-3">
         {categories.map(cat => (
           <Link
             href={`/shop/${cat.slug}`}
             key={cat.name}
-            className={`flex flex-col items-center justify-center p-3 rounded-xl border hover:shadow-md hover:-translate-y-0.5 transition-all bg-white ${cat.color.split(' ').slice(2).join(' ')} group cursor-pointer h-24`}
+            className={`flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-xl border hover:shadow-md hover:-translate-y-0.5 transition-all bg-white ${cat.color.split(' ').slice(2).join(' ')} group cursor-pointer h-20 sm:h-24`}
           >
-            <span className="text-2xl mb-1.5">{cat.icon}</span>
-            <span className={`text-xs font-semibold ${cat.color.split(' ').slice(0, 2).join(' ')} group-hover:opacity-80 text-center leading-tight`}>
+            <span className="text-xl sm:text-2xl mb-1 sm:mb-1.5">{cat.icon}</span>
+            <span className={`text-[11px] sm:text-xs font-semibold ${cat.color.split(' ').slice(0, 2).join(' ')} group-hover:opacity-80 text-center leading-tight`}>
               {cat.name}
             </span>
           </Link>
@@ -95,7 +96,7 @@ export default async function ShopPage() {
               <div className="aspect-square bg-slate-50 relative overflow-hidden">
                 {item.image_url ? (
                   <img
-                    src={item.image_url}
+                    src={item.image_url.split(',')[0].trim()}
                     alt={item.name}
                     loading="lazy"
                     decoding="async"
@@ -108,7 +109,9 @@ export default async function ShopPage() {
                 )}
                 {(item.stock_quantity - (item.reserved_quantity || 0)) <= 0 && (
                   <div className="absolute inset-0 bg-white/75 flex items-center justify-center">
-                    <span className="text-[10px] font-bold bg-slate-700 text-white px-2 py-0.5 rounded-full">Out of Stock</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.allow_preorder ? 'bg-amber-500 text-white' : 'bg-slate-700 text-white'}`}>
+                      {item.allow_preorder ? 'Pre-order' : 'Out of Stock'}
+                    </span>
                   </div>
                 )}
               </div>

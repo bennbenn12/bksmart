@@ -4,6 +4,8 @@ import Header from '@/components/layout/Header'
 import { LoadingSpinner, EmptyState } from '@/components/ui'
 import { createClient } from '@/lib/db/client'
 import { useAuth } from '@/components/providers/AuthProvider'
+import { useRealtime } from '@/lib/useRealtime'
+import { useToast } from '@/components/providers/ToastProvider'
 import { formatCurrency, formatDate, cn } from '@/lib/utils'
 import { 
   TrendingUp, TrendingDown, ShoppingCart, Users, CreditCard, 
@@ -25,6 +27,7 @@ const thisMonthStart = () => {
 
 export default function AnalyticsPage() {
   const { profile } = useAuth()
+  const toast = useToast()
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState('today') // today, week, month
   const [stats, setStats] = useState({
@@ -141,11 +144,13 @@ export default function AnalyticsPage() {
       })
     } catch (error) {
       console.error('Error fetching analytics:', error)
+      toast('Failed to load analytics data. Please try refreshing.', 'error')
     } finally {
       setLoading(false)
     }
   }, [dateRange, supabase])
 
+  useRealtime({ tables:['orders','order_items','feedback'], onRefresh:fetchAnalytics, enabled:!!profile, interval:30000 })
   useEffect(() => {
     if (profile) fetchAnalytics()
   }, [profile, fetchAnalytics])

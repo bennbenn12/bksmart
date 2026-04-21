@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import { Modal, Alert, LoadingSpinner, EmptyState, Badge, Pagination } from '@/components/ui'
 import { createClient } from '@/lib/db/client'
@@ -7,11 +8,12 @@ import { useAuth } from '@/components/providers/AuthProvider'
 import { useRealtime } from '@/lib/useRealtime'
 import { useToast } from '@/components/providers/ToastProvider'
 import { formatCurrency, CATEGORIES, SHOPS, shopLabel, cn, CLOTHING_SIZES } from '@/lib/utils'
-import { Package, Plus, Search, Edit2, TrendingUp, AlertTriangle, Loader2, RefreshCw, ImagePlus, X, PlusCircle } from 'lucide-react'
+import { Package, Plus, Search, Edit2, TrendingUp, AlertTriangle, Loader2, RefreshCw, ImagePlus, X, PlusCircle, Upload } from 'lucide-react'
 
 export default function InventoryPage() {
   const { profile } = useAuth()
   const toast = useToast()
+  const router = useRouter()
   const [items, setItems]       = useState([])
   const [loading, setLoading]   = useState(true)
   const [search, setSearch]     = useState('')
@@ -55,10 +57,12 @@ export default function InventoryPage() {
         await supabase.from('bookstore_items').update(form).eq('item_id', form.item_id)
         toast('Item updated.','success')
       } else {
-        await supabase.from('bookstore_items').insert({ ...form, created_by:profile.id_number })
+        await supabase.from('bookstore_items').insert({ ...form, created_by:profile.user_id })
         toast('Item created.','success')
       }
       setCreate(false); setEdit(null)
+      await fetchItems() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
     } catch(e) { toast(e.message,'error') }
   }
 
@@ -66,9 +70,11 @@ export default function InventoryPage() {
     try {
       const newQty = item.stock_quantity + parseInt(qty)
       await supabase.from('bookstore_items').update({ stock_quantity:newQty }).eq('item_id', item.item_id)
-      await supabase.from('inventory_logs').insert({ item_id:item.item_id, changed_by:profile.id_number, change_type:'Restock', quantity_before:item.stock_quantity, quantity_after:newQty, delta:parseInt(qty), notes:notes||null })
+      await supabase.from('inventory_logs').insert({ item_id:item.item_id, changed_by:profile.user_id, change_type:'Restock', quantity_before:item.stock_quantity, quantity_after:newQty, delta:parseInt(qty), notes:notes||null })
       toast(`Restocked ${item.name} (+${qty})`, 'success')
       setRestock(null)
+      await fetchItems() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
     } catch(e) { toast(e.message,'error') }
   }
 
@@ -141,15 +147,42 @@ function ItemModal({ item, onClose, onSave, categories = CATEGORIES, onCategoryA
   const [saving, setSaving] = useState(false)
   const [images, setImages] = useState(() => {
     const urls = (item?.image_url || '').split(',').map(s => s.trim()).filter(Boolean)
-    return urls.length ? urls : ['']
+    return urls.length ? urls : []
   })
   const [newCat, setNewCat] = useState('')
   const [showNewCat, setShowNewCat] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
 
   function addImageField() { setImages(prev => [...prev, '']) }
   function removeImage(idx) { setImages(prev => prev.filter((_, i) => i !== idx)) }
   function updateImage(idx, val) { setImages(prev => prev.map((v, i) => i === idx ? val : v)) }
+
+  async function handleFileUpload(e, idx) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      })
+      
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || 'Upload failed')
+      
+      updateImage(idx, result.url)
+      toast('Image uploaded successfully', 'success')
+    } catch (err) {
+      toast(err.message || 'Failed to upload image', 'error')
+    } finally {
+      setUploading(false)
+    }
+  }
 
   async function addCategory() {
     const name = newCat.trim()
@@ -222,22 +255,76 @@ function ItemModal({ item, onClose, onSave, categories = CATEGORIES, onCategoryA
           <div className="col-span-2"><label className="label">Description</label><textarea className="input resize-none" rows={2} value={form.description||''} onChange={e=>set('description',e.target.value)}/></div>
         </div>
 
-        {/* Multiple Images */}
+        {/* Multiple Images - File Upload */}
         <div className="border-t border-slate-100 pt-4">
           <div className="flex items-center justify-between mb-3">
-            <label className="label mb-0">Image URLs</label>
-            <button type="button" onClick={addImageField} className="btn-ghost text-xs gap-1"><ImagePlus size={12}/> Add Image</button>
+            <label className="label mb-0">Item Images</label>
+            <button type="button" onClick={addImageField} className="btn-ghost text-xs gap-1" disabled={uploading}><ImagePlus size={12}/> Add Image</button>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-3">
+            {images.length === 0 && (
+              <div className="text-sm text-slate-400 p-4 bg-slate-50 rounded-lg text-center">
+                No images added. Click "Add Image" to upload.
+              </div>
+            )}
             {images.map((url, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <input className="input flex-1" placeholder={`Image URL ${idx+1} (e.g. https://...)`} value={url} onChange={e=>updateImage(idx, e.target.value)}/>
-                {url && <div className="w-8 h-8 rounded border border-slate-200 overflow-hidden shrink-0 bg-slate-50"><img src={url} className="w-full h-full object-cover" onError={e=>{e.target.style.display='none'}}/></div>}
-                {images.length > 1 && <button type="button" onClick={()=>removeImage(idx)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"><X size={14}/></button>}
+              <div key={idx} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                {/* Preview or Upload Button */}
+                <div className="shrink-0">
+                  {url ? (
+                    <div className="w-16 h-16 rounded-lg border border-slate-200 overflow-hidden bg-white">
+                      <img src={url} className="w-full h-full object-cover" alt={`Preview ${idx+1}`}/>
+                    </div>
+                  ) : (
+                    <label className="w-16 h-16 rounded-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center cursor-pointer hover:border-brand-400 hover:bg-brand-50 transition-colors bg-white">
+                      <Upload size={20} className="text-slate-400"/>
+                      <span className="text-[10px] text-slate-400 mt-1">Upload</span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/gif,image/webp"
+                        className="hidden"
+                        onChange={e => handleFileUpload(e, idx)}
+                        disabled={uploading}
+                      />
+                    </label>
+                  )}
+                </div>
+                
+                {/* URL input (for editing) or upload button */}
+                <div className="flex-1 min-w-0">
+                  {url ? (
+                    <div className="space-y-2">
+                      <input 
+                        className="input text-xs" 
+                        value={url} 
+                        readOnly
+                        title="Uploaded image path"
+                      />
+                      <div className="flex gap-2">
+                        <label className="btn-ghost text-xs cursor-pointer">
+                          <Upload size={12} className="inline mr-1"/>
+                          Replace
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/gif,image/webp"
+                            className="hidden"
+                            onChange={e => handleFileUpload(e, idx)}
+                            disabled={uploading}
+                          />
+                        </label>
+                        <button type="button" onClick={()=>removeImage(idx)} className="btn-ghost text-xs text-red-500"><X size={12}/> Remove</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-slate-500">
+                      {uploading ? 'Uploading...' : 'Click "Upload" or drag a file to add an image'}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
-          <p className="text-[10px] text-slate-400 mt-2">Add multiple image URLs for this item. The first image will be used as the primary display image.</p>
+          <p className="text-[10px] text-slate-400 mt-2">Upload images from your device (JPEG, PNG, GIF, WebP - max 5MB). The first image will be the primary display image.</p>
         </div>
 
         <div className="flex justify-end gap-2"><button type="button" onClick={onClose} className="btn-secondary">Cancel</button><button type="submit" disabled={saving} className="btn-primary">{saving?<Loader2 size={14} className="animate-spin"/>:'Save Item'}</button></div>

@@ -115,7 +115,7 @@ function FeedbackModal({ onClose, onSubmitted }) {
 
   useEffect(() => {
     if (!profile) return
-    supabase.from('orders').select('order_id,order_number').eq('user_id',profile.id_number).eq('status','Released').limit(10).then(({data,error})=>{
+    supabase.from('orders').select('order_id,order_number').eq('user_id',profile.user_id).eq('status','Released').limit(10).then(({data,error})=>{
       if (error) console.error('Error loading orders:', error)
       setOrders(data||[])
     })
@@ -127,7 +127,7 @@ function FeedbackModal({ onClose, onSubmitted }) {
     if (!form.content.trim()) { toast('Please write your feedback.','warning'); return }
     setSaving(true)
     try {
-      await supabase.from('feedback').insert({ user_id:profile.id_number, content:form.content, rating:form.rating||null, order_id:form.order_id||null })
+      await supabase.from('feedback').insert({ user_id:profile.user_id, content:form.content, rating:form.rating||null, order_id:form.order_id||null })
       onSubmitted()
     } catch(e) { toast(e.message,'error') } finally { setSaving(false) }
   }

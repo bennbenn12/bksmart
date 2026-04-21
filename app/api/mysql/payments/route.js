@@ -34,7 +34,7 @@ export async function GET(request) {
       SELECT COUNT(DISTINCT p.payment_id) as total
       FROM payments p
       JOIN orders o ON p.order_id = o.order_id
-      JOIN users u ON o.user_id = u.id_number
+      JOIN users u ON o.user_id = u.user_id
       LEFT JOIN order_items oi ON o.order_id = oi.order_id
       LEFT JOIN bookstore_items bi ON oi.item_id = bi.item_id
       WHERE 1=1
@@ -47,7 +47,7 @@ export async function GET(request) {
         GROUP_CONCAT(bi.name SEPARATOR ', ') as items_ordered
       FROM payments p
       JOIN orders o ON p.order_id = o.order_id
-      JOIN users u ON o.user_id = u.id_number
+      JOIN users u ON o.user_id = u.user_id
       LEFT JOIN order_items oi ON o.order_id = oi.order_id
       LEFT JOIN bookstore_items bi ON oi.item_id = bi.item_id
       WHERE 1=1

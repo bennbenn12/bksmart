@@ -2,11 +2,12 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Package, Printer, FileText, ArrowLeft, Clock, CheckCircle, RefreshCw, ListOrdered, CalendarDays, CreditCard, MessageSquare } from 'lucide-react'
+import { Package, Printer, FileText, ArrowLeft, CheckCircle, RefreshCw, ListOrdered, CalendarDays, CreditCard, MessageSquare, Clock } from 'lucide-react'
 import { createClient } from '@/lib/db/client'
 import { useAuth } from '@/components/providers/AuthProvider'
+import { useRealtime } from '@/lib/useRealtime'
 import { JO_STATUS_COLORS, ORDER_STATUS_COLORS, cn, formatCurrency, formatDateTime } from '@/lib/utils'
-import CancelOrderButton from './CancelOrderButton'
+import OrderCard from './OrderCard'
 
 const STATUS_HINTS = {
   Pending:   '📋 Your order is being prepared. You will be notified when ready for pickup.',
@@ -36,17 +37,20 @@ export default function MyOrdersPage() {
   const hasAnyOrders = (orders?.length > 0) || (risoJobs?.length > 0)
   
   // Fetch orders and RISO jobs
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (silent = false) => {
     if (!profile) return
-    setLoading(true)
+    if (!silent) setLoading(true)
     
     // Fetch regular orders
-    const { data: orderData } = await supabase
+    const { data: orderData, error: orderError } = await supabase
       .from('orders')
-      .select('*, order_items(order_item_id,quantity,unit_price,bookstore_items(name,image_url,category)), payments(payment_id,verified_at)')
-      .eq('user_id', profile.id_number)
+      .select('*, items:order_items(order_item_id,quantity,unit_price,item:item_id(name,image_url,category)), payments(payment_id,verified_at)')
+      .eq('user_id', profile.user_id)
       .order('created_at',{ascending:false})
       .limit(50)
+    
+    if (orderError) console.error('[Orders] Error:', orderError)
+    
     setOrders(orderData || [])
     
     // Fetch RISO job orders for teachers
@@ -54,7 +58,7 @@ export default function MyOrdersPage() {
       const { data: jobs } = await supabase
         .from('job_orders')
         .select('*, riso_items:riso_job_items(*)')
-        .eq('requester_id', profile.id_number)
+        .eq('requester_id', profile.user_id)
         .eq('job_type', 'RISO')
         .order('created_at', { ascending: false })
         .limit(50)
@@ -64,6 +68,7 @@ export default function MyOrdersPage() {
     setLoading(false)
   }, [profile, supabase, isTeacher])
   
+  useRealtime({ tables:['orders','job_orders'], onRefresh:fetchData, enabled:!!profile })
   useEffect(() => {
     fetchData()
   }, [fetchData])
@@ -127,7 +132,7 @@ export default function MyOrdersPage() {
                   </span>
                 </div>
                 <div className="text-xs text-purple-600">
-                  {job.riso_items?.length || 0} subject(s)
+                  {job.riso_job_items?.length || 0} subject(s)
                 </div>
               </div>
               
@@ -144,14 +149,14 @@ export default function MyOrdersPage() {
                 
                 {/* RISO Items Summary */}
                 <div className="text-xs text-slate-500 space-y-1">
-                  {job.riso_items?.slice(0, 3).map((item, idx) => (
+                  {job.riso_job_items?.slice(0, 3).map((item, idx) => (
                     <div key={idx} className="flex justify-between">
                       <span>{item.subject}</span>
                       <span>{item.num_masters} master(s) × {item.copies_per_master} copies ({item.print_type === 'B_to_B' ? 'B to B' : '1 side'})</span>
                     </div>
                   ))}
-                  {job.riso_items?.length > 3 && (
-                    <p className="text-slate-400">+{job.riso_items.length - 3} more subject(s)</p>
+                  {job.riso_job_items?.length > 3 && (
+                    <p className="text-slate-400">+{job.riso_job_items.length - 3} more subject(s)</p>
                   )}
                 </div>
               </div>
@@ -221,8 +226,8 @@ export default function MyOrdersPage() {
                   <span className="font-bold text-slate-700">{formatCurrency(o.total_amount)}</span>
                 </div>
                 <p className="text-xs text-slate-500 mb-3">
-                  {o.order_items?.length || 0} item(s) · {o.order_items?.slice(0,2).map(i => i.bookstore_items?.name).join(', ')}
-                  {o.order_items?.length > 2 && '...'}
+                  {o.items?.length || 0} item(s) · {o.items?.slice(0,2).map(i => i.item?.name).join(', ')}
+                  {o.items?.length > 2 && '...'}
                 </p>
                 <div className="flex gap-2">
                   <Link 
@@ -253,80 +258,7 @@ export default function MyOrdersPage() {
               All Orders
             </h2>
           )}
-          {orders.map(o=>{
-        const isPaid = o.payments?.some(p => p.verified_at)
-        const needsTeller = parseFloat(o.total_amount) >= 100
-        return (
-        <div key={o.order_id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between px-5 py-4 bg-slate-50 border-b border-slate-100">
-            <div className="flex items-center gap-3">
-              <span className="font-mono text-sm font-bold text-brand-700">{o.order_number}</span>
-              <span className={cn('badge text-xs',ORDER_STATUS_COLORS[o.status]||'bg-slate-100')}>{o.status}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="font-bold text-slate-700">{formatCurrency(o.total_amount)}</span>
-              {o.status === 'Pending' && <CancelOrderButton orderId={o.order_id} orderNumber={o.order_number} />}
-              <Link href={`/shop/orders/${o.order_id}/slip`} className="btn-secondary py-1 px-3 text-xs">View Slip</Link>
-            </div>
-          </div>
-          <div className="divide-y divide-slate-50">
-            {o.order_items?.slice(0,3).map(item=>(
-              <div key={item.order_item_id} className="flex items-center gap-3 px-5 py-3">
-                <div className="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center border border-slate-100 shrink-0 overflow-hidden text-lg">
-                  {item.bookstore_items?.image_url ? <img src={item.bookstore_items.image_url} className="w-full h-full object-cover"/> : '📖'}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-slate-700 text-sm truncate">{item.bookstore_items?.name}</p>
-                  <p className="text-xs text-slate-400">Qty: {item.quantity} × {formatCurrency(item.unit_price)}</p>
-                </div>
-                <p className="font-bold text-slate-600 text-sm shrink-0">{formatCurrency(item.quantity*item.unit_price)}</p>
-              </div>
-            ))}
-            {o.order_items?.length > 3 && <p className="px-5 py-2 text-xs text-slate-400">+{o.order_items.length-3} more item(s)</p>}
-          </div>
-
-          {/* Status hint + contextual actions */}
-          <div className="px-5 py-3 border-t border-slate-100 space-y-2">
-            {STATUS_HINTS[o.status] && (
-              <p className="text-xs text-slate-500 flex items-center gap-1.5">
-                <Clock size={11} className="shrink-0"/>
-                {o.status === 'Pending' && needsTeller && !isPaid
-                  ? 'Please pay at the University Teller and present your Official Receipt at the Bookstore.'
-                  : o.status === 'Pending' && !needsTeller && !isPaid
-                  ? 'Visit the Bookstore to pay and pick up your items.'
-                  : STATUS_HINTS[o.status]}
-              </p>
-            )}
-            <div className="flex items-center flex-wrap gap-2">
-              <span className="text-xs text-slate-400">Placed: {formatDateTime(o.created_at)}</span>
-              {o.status==='Released' && o.released_at && <span className="text-xs text-slate-400">· Released: {formatDateTime(o.released_at)}</span>}
-              {o.status==='Cancelled' && o.notes && <span className="text-xs text-red-400">· Reason: {o.notes}</span>}
-              <div className="ml-auto flex items-center gap-2">
-                {o.status === 'Pending' && needsTeller && !isPaid && (
-                  <Link href={`/shop/orders/${o.order_id}/slip`} className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700">
-                    <CreditCard size={11}/> Print Teller Slip
-                  </Link>
-                )}
-                {o.status === 'Ready' && (
-                  <Link href={`/shop/queue?orderId=${o.order_id}`} className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700">
-                    <ListOrdered size={11}/> Join Queue for Pickup
-                  </Link>
-                )}
-                {o.status === 'Ready' && (
-                  <Link href={`/shop/appointments?orderId=${o.order_id}`} className="inline-flex items-center gap-1 text-xs font-semibold text-purple-600 hover:text-purple-700">
-                    <CalendarDays size={11}/> Book Pickup Appointment
-                  </Link>
-                )}
-                {o.status === 'Released' && (
-                  <Link href="/shop/feedback" className="inline-flex items-center gap-1 text-xs font-semibold text-green-600 hover:text-green-700">
-                    <MessageSquare size={11}/> Give Feedback
-                  </Link>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )})}
+          {orders.map(o => <OrderCard key={o.order_id} order={o} />)}
         </div>
       )}
 

@@ -23,12 +23,12 @@ export default function ImageGallery({ images, name }) {
         />
       </div>
       {images.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto pb-2">
+        <div className="flex gap-2 overflow-x-auto pb-2 snap-x">
           {images.map((img, idx) => (
             <button 
               key={idx} 
               onClick={() => setActive(idx)}
-              className={`relative w-20 h-20 shrink-0 rounded-xl overflow-hidden border-2 transition-all ${active === idx ? 'border-brand-500 shadow-md' : 'border-slate-200 opacity-60 hover:opacity-100'}`}
+              className={`relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-lg sm:rounded-xl overflow-hidden border-2 transition-all snap-start ${active === idx ? 'border-brand-500 shadow-md' : 'border-slate-200 opacity-60 hover:opacity-100'}`}
             >
               <img src={img} className="w-full h-full object-cover mix-blend-multiply bg-slate-50" />
             </button>

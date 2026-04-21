@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import { Modal, Alert, LoadingSpinner, EmptyState, Pagination, Badge } from '@/components/ui'
 import { createClient } from '@/lib/db/client'
@@ -14,6 +15,7 @@ const ALL_ROLES = ['bookstore_manager','bookstore_staff','working_student','teac
 
 export default function AccountsPage() {
   const toast = useToast()
+  const router = useRouter()
   const { profile: currentUser } = useAuth()
   const [profiles, setProfiles]   = useState([])
   const [loading, setLoading]     = useState(true)
@@ -55,7 +57,8 @@ export default function AccountsPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to resend welcome email')
       
       toast(`Welcome email resent to ${user.email}`, 'success')
-      fetchUsers() // Refresh to show updated expiry
+      await fetchUsers() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
       
       // If email failed but we got a password, show it to manager
       if (data.temporaryPassword) {
@@ -93,7 +96,8 @@ export default function AccountsPage() {
 
     await supabase.from('users').update({ status:newStatus }).eq('id_number', user.id_number)
     toast(`${user.first_name} ${user.last_name} set to ${newStatus}.`, newStatus==='Active'?'success':'warning')
-    fetchUsers()
+    await fetchUsers() // Immediate client-side refresh
+    router.refresh() // Server-side refresh
   }
 
   return (
@@ -187,7 +191,7 @@ export default function AccountsPage() {
         </div>
       </div>
 
-      {(showCreate||editUser) && <UserModal user={editUser} onClose={()=>{setCreate(false);setEdit(null)}} onSaved={()=>{setCreate(false);setEdit(null);fetchUsers();toast('User saved!','success')}}/>}
+      {(showCreate||editUser) && <UserModal user={editUser} onClose={()=>{setCreate(false);setEdit(null)}} onSaved={()=>{setCreate(false);setEdit(null);fetchUsers();router.refresh();toast('User saved!','success')}}/>}
     </div>
   )
 }

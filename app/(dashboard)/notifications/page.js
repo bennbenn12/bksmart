@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import { LoadingSpinner, EmptyState } from '@/components/ui'
 import { createClient } from '@/lib/db/client'
@@ -15,23 +16,26 @@ const TYPE_COLORS = { info:'text-blue-600 bg-blue-50', success:'text-green-600 b
 export default function NotificationsPage() {
   const { profile } = useAuth()
   const toast = useToast()
+  const router = useRouter()
   const [notifs, setNotifs]   = useState([])
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
 
   const fetchNotifs = useCallback(async () => {
     if (!profile) return
-    const { data } = await supabase.from('notifications').select('*').eq('user_id',profile.id_number).order('created_at',{ascending:false}).limit(50)
+    const { data } = await supabase.from('notifications').select('*').eq('user_id',profile.user_id).order('created_at',{ascending:false}).limit(50)
     setNotifs(data||[])
     setLoading(false)
   }, [profile])
 
-  useRealtime({ tables:[{ table:'notifications', filter:`user_id=eq.${profile?.id_number}` }], onRefresh:fetchNotifs, enabled:!!profile })
+  useRealtime({ tables:[{ table:'notifications', filter:`user_id=eq.${profile?.user_id}` }], onRefresh:fetchNotifs, enabled:!!profile })
   useEffect(() => { if (profile) fetchNotifs() }, [profile])
 
   async function markAllRead() {
-    await supabase.from('notifications').update({ status:'Read' }).eq('user_id',profile.id_number).eq('status','Unread')
+    await supabase.from('notifications').update({ status:'Read' }).eq('user_id',profile.user_id).eq('status','Unread')
     setNotifs(prev=>prev.map(n=>({...n,status:'Read'})))
+    await fetchNotifs() // Immediate client-side refresh
+    router.refresh() // Server-side refresh
     toast('All notifications marked as read.','success')
   }
 

@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import { Modal, Alert, LoadingSpinner, EmptyState, Pagination } from '@/components/ui'
 import { createClient } from '@/lib/db/client'
@@ -19,6 +20,7 @@ const EXAM_TYPES = ['Prelim', 'Midterm', 'Pre-Final', 'Final', 'Elem. Test', 'HS
 export default function JobOrdersPage() {
   const { profile } = useAuth()
   const toast = useToast()
+  const router = useRouter()
   const [jos, setJos]           = useState([])
   const [loading, setLoading]   = useState(true)
   const [statusFilter, setStat] = useState('')
@@ -39,15 +41,15 @@ export default function JobOrdersPage() {
   const isTeacher = profile?.role_type === 'teacher'
   const canManageRiso = isStaff || isRisographer
 
-  const fetchJOs = useCallback(async () => {
+  const fetchJOs = useCallback(async (silent = false) => {
     if (!profile) return
-    setLoading(true)
+    if (!silent) setLoading(true)
     let q = supabase.from('job_orders')
       .select('*, requester:requester_id(first_name,last_name,department,id_number), riso_items:riso_job_items(*)', { count:'exact' })
       .order('created_at', { ascending:false })
       .range((page-1)*PAGE, page*PAGE-1)
     // Teachers see their own, risographers see RISO jobs, staff see all
-    if (isTeacher) q = q.eq('requester_id', profile.id_number)
+    if (isTeacher) q = q.eq('requester_id', profile.user_id)
     if (isRisographer) q = q.eq('job_type', 'RISO')
     if (statusFilter) q = q.eq('status', statusFilter)
     if (search) q = q.ilike('job_number', `%${search}%`)
@@ -80,9 +82,9 @@ export default function JobOrdersPage() {
         }
       }
       if (status === 'Approved') {
-        updates.audited_by  = profile.id_number
+        updates.audited_by  = profile.user_id
         updates.audited_at  = new Date().toISOString()
-        updates.approved_by = profile.id_number
+        updates.approved_by = profile.user_id
         updates.approved_at = new Date().toISOString()
         if (auditNotes) updates.audit_notes = auditNotes
         
@@ -95,7 +97,7 @@ export default function JobOrdersPage() {
         }
       }
       if (status === 'Rejected') {
-        updates.audited_by = profile.id_number
+        updates.audited_by = profile.user_id
         updates.audited_at = new Date().toISOString()
         if (auditNotes) updates.audit_notes = auditNotes
         
@@ -108,7 +110,7 @@ export default function JobOrdersPage() {
         }
       }
       if (status === 'Processing') {
-        updates.risographer_id = profile.id_number
+        updates.risographer_id = profile.user_id
         updates.processing_at = new Date().toISOString()
         
         // Send "printing started" email for RISO jobs
@@ -127,7 +129,8 @@ export default function JobOrdersPage() {
       await supabase.from('job_orders').update(updates).eq('job_id', id)
       toast(`Job Order ${fmtStatus(status)}.`, 'success')
       if (viewJO?.job_id === id) setViewJO(j => ({ ...j, status, ...updates }))
-      fetchJOs()
+      await fetchJOs() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
     } catch(e) { toast(e.message,'error') } finally { setActing(false) }
   }
 
@@ -187,26 +190,28 @@ export default function JobOrdersPage() {
         ink_used: costs.inkUsed,
         masters_used: costs.mastersUsed,
         total_amount: costs.totalCost,
-        computed_by: profile.id_number,
+        computed_by: profile.user_id,
         computed_at: new Date().toISOString()
       }).eq('job_id', jobId)
       if (error) throw error
       toast('Costs computed and saved', 'success')
       setShowComputeModal(false)
-      fetchJOs()
+      await fetchJOs() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
     } catch(e) { toast(e.message, 'error') }
   }
 
   async function approveFinal(jobId) {
     try {
       const { error } = await supabase.from('job_orders').update({
-        final_approved_by: profile.id_number,
+        final_approved_by: profile.user_id,
         final_approved_at: new Date().toISOString(),
         status: 'Approved'
       }).eq('job_id', jobId)
       if (error) throw error
       toast('Job Order finally approved for printing', 'success')
-      fetchJOs()
+      await fetchJOs() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
     } catch(e) { toast(e.message, 'error') }
   }
 
@@ -227,7 +232,7 @@ export default function JobOrdersPage() {
         }).eq('item_id', paperItem.item_id)
         await supabase.from('inventory_logs').insert({
           item_id: paperItem.item_id,
-          changed_by: profile.id_number,
+          changed_by: profile.user_id,
           change_type: 'Deduct',
           quantity_before: paperItem.stock_quantity,
           quantity_after: Math.max(0, paperItem.stock_quantity - job.paper_used),
@@ -238,7 +243,8 @@ export default function JobOrdersPage() {
       }
       
       toast('Inventory deducted successfully', 'success')
-      fetchJOs()
+      await fetchJOs() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
     } catch(e) { toast(e.message, 'error') }
   }
 
@@ -495,7 +501,7 @@ function CreateJOModal({ onClose, onCreated }) {
       // Insert job order
       const { generateJobNumber } = await import('@/lib/utils')
       const { data: jobData, error: jobError } = await supabase.from('job_orders').insert({
-        requester_id: profile.id_number,
+        requester_id: profile.user_id,
         department_account: form.department_account,
         cost_center: form.cost_center || null,
         description: form.description,
@@ -670,7 +676,7 @@ function ComputeCostsModal({ job, onClose, onComputed }) {
         ink_used: costs.inkUsed,
         masters_used: costs.mastersUsed,
         total_amount: costs.totalCost,
-        computed_by: profile.id_number,
+        computed_by: profile.user_id,
         computed_at: new Date().toISOString()
       }).eq('job_id', job.job_id)
       if (error) throw error

@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import { Modal, Alert, LoadingSpinner, EmptyState, Pagination } from '@/components/ui'
 import { createClient } from '@/lib/db/client'
@@ -16,6 +17,7 @@ const RISO_STATUSES = ['Pending', 'Processing', 'Completed']
 export default function RisoQueuePage() {
   const { profile } = useAuth()
   const toast = useToast()
+  const router = useRouter()
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
   // Default to showing Approved jobs for risographers so they can start printing
@@ -56,7 +58,7 @@ export default function RisoQueuePage() {
       const now = new Date().toISOString()
       const { error } = await supabase.from('job_orders').update({
         status: 'Processing',
-        risographer_id: profile.id_number,
+        risographer_id: profile.user_id,
         processing_at: now
       }).eq('job_id', jobId)
       if (error) throw error
@@ -64,14 +66,14 @@ export default function RisoQueuePage() {
       // Update local state immediately so UI shows Complete button
       setJobs(prev => prev.map(j => 
         j.job_id === jobId 
-          ? { ...j, status: 'Processing', risographer_id: profile.id_number, processing_at: now }
+          ? { ...j, status: 'Processing', risographer_id: profile.user_id, processing_at: now }
           : j
       ))
       
       // Add to RISO queue
       await supabase.from('riso_queue').insert({
         job_id: jobId,
-        risographer_id: profile.id_number,
+        risographer_id: profile.user_id,
         status: 'Processing'
       })
       
@@ -93,7 +95,8 @@ export default function RisoQueuePage() {
       }
       
       toast('Started processing RISO job', 'success')
-      fetchJobs()
+      await fetchJobs() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
     } catch (e) { toast(e.message, 'error') } finally { setActing(false) }
   }
 
@@ -133,7 +136,8 @@ export default function RisoQueuePage() {
       toast('RISO job completed successfully', 'success')
       setShowComputeModal(false)
       setViewJob(null)
-      fetchJobs()
+      await fetchJobs() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
     } catch (e) { toast(e.message, 'error') }
   }
 
@@ -149,7 +153,7 @@ export default function RisoQueuePage() {
         
         await supabase.from('inventory_logs').insert({
           item_id: paperItem.item_id,
-          changed_by: profile.id_number,
+          changed_by: profile.user_id,
           change_type: 'Deduct',
           quantity_before: paperItem.stock_quantity,
           quantity_after: Math.max(0, paperItem.stock_quantity - costs.paperUsed),
@@ -169,7 +173,7 @@ export default function RisoQueuePage() {
         
         await supabase.from('inventory_logs').insert({
           item_id: inkItem.item_id,
-          changed_by: profile.id_number,
+          changed_by: profile.user_id,
           change_type: 'Deduct',
           quantity_before: inkItem.stock_quantity,
           quantity_after: Math.max(0, inkItem.stock_quantity - costs.inkUsed),
@@ -189,7 +193,7 @@ export default function RisoQueuePage() {
         
         await supabase.from('inventory_logs').insert({
           item_id: masterItem.item_id,
-          changed_by: profile.id_number,
+          changed_by: profile.user_id,
           change_type: 'Deduct',
           quantity_before: masterItem.stock_quantity,
           quantity_after: Math.max(0, masterItem.stock_quantity - costs.mastersUsed),

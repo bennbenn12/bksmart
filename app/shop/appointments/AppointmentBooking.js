@@ -1,6 +1,7 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/db/client'
+import { useRouter } from 'next/navigation'
 import { Calendar, Clock, Loader2, Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -12,20 +13,22 @@ export default function AppointmentBooking({ orderId, onComplete }) {
   const [error, setError] = useState('')
   const [booked, setBooked] = useState(false)
   const supabase = createClient()
+  const router = useRouter()
+
+  const fetchSlots = useCallback(async () => {
+    const today = new Date().toISOString().split('T')[0]
+    const { data } = await supabase.from('appointment_slots')
+      .select('*')
+      .gte('slot_date', today)
+      .order('slot_date')
+      .order('slot_time')
+    setSlots((data || []).filter(s => s.current_bookings < s.max_capacity))
+    setFetching(false)
+  }, [supabase])
 
   useEffect(() => {
-    async function fetchSlots() {
-      const today = new Date().toISOString().split('T')[0]
-      const { data } = await supabase.from('appointment_slots')
-        .select('*')
-        .gte('slot_date', today)
-        .order('slot_date')
-        .order('slot_time')
-      setSlots((data || []).filter(s => s.current_bookings < s.max_capacity))
-      setFetching(false)
-    }
     fetchSlots()
-  }, [])
+  }, [fetchSlots])
 
   // Group slots by date
   const byDate = slots.reduce((acc, s) => {
@@ -41,16 +44,29 @@ export default function AppointmentBooking({ orderId, onComplete }) {
     setError('')
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Not logged in')
-      const { data: profile } = await supabase.from('users').select('id_number').eq('auth_id', user.id).single()
+      if (!user) throw new Error('Please log in to book an appointment')
+      const { data: profile } = await supabase.from('users').select('user_id').eq('auth_id', user.id).single()
       if (!profile) throw new Error('Profile not found')
 
       const slot = slots.find(s => s.slot_id === selectedSlot)
-      if (!slot) throw new Error('Slot not found')
+      if (!slot) throw new Error('Selected slot not found')
+      
+      // Check slot availability again (race condition prevention)
+      const { data: currentSlot } = await supabase.from('appointment_slots')
+        .select('current_bookings,max_capacity')
+        .eq('slot_id', slot.slot_id)
+        .single()
+      
+      if (!currentSlot) throw new Error('This slot is no longer available')
+      if (currentSlot.current_bookings >= currentSlot.max_capacity) {
+        throw new Error('This slot is now full. Please select another time.')
+      }
 
       const { generateApptNumber } = await import('@/lib/utils')
+      
+      // Create appointment
       const { error: insertErr } = await supabase.from('appointments').insert({
-        user_id: profile.id_number,
+        user_id: profile.user_id,
         order_id: orderId || null,
         schedule_date: slot.slot_date,
         time_slot: slot.slot_time,
@@ -58,16 +74,24 @@ export default function AppointmentBooking({ orderId, onComplete }) {
         purpose: 'OR Presentation & Item Pickup',
         appt_number: generateApptNumber(),
       })
-      if (insertErr) throw insertErr
+      if (insertErr) throw new Error('Failed to create appointment: ' + insertErr.message)
 
-      await supabase.from('appointment_slots').update({
-        current_bookings: slot.current_bookings + 1,
+      // Update slot booking count
+      const { error: updateErr } = await supabase.from('appointment_slots').update({
+        current_bookings: currentSlot.current_bookings + 1,
       }).eq('slot_id', slot.slot_id)
+      
+      if (updateErr) {
+        // If slot update fails, we should ideally rollback, but appointments is already created
+        console.error('Failed to update slot count:', updateErr)
+      }
 
       setBooked(true)
+      await fetchSlots() // Immediate client-side refresh
+      router.refresh() // Server-side refresh
       if (onComplete) setTimeout(onComplete, 1500)
     } catch (e) {
-      setError(e.message || 'Failed to book appointment.')
+      setError(e.message || 'Failed to book appointment. Please try again.')
     } finally {
       setLoading(false)
     }

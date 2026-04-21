@@ -40,26 +40,38 @@ function MyAppointmentsContent() {
   const searchParams = useSearchParams()
   const preSelectedOrderId = searchParams.get('orderId')
 
-  const fetchAppts = useCallback(async () => {
+  const fetchAppts = useCallback(async (silent = false) => {
     if (!profile) return
+    if (!silent) setLoading(true)
     const { data } = await supabase.from('appointments')
-      .select(`*, order:order_id(order_number, order_items(quantity, bookstore_items(name)))`)
-      .eq('user_id', profile.id_number)
+      .select(`*, order:order_id(order_number, items:order_items(quantity, item:item_id(name)))`)
+      .eq('user_id', profile.user_id)
       .order('schedule_date',{ascending:false})
-    setAppts(data||[]); setLoading(false)
+    setAppts(data||[])
+    setLoading(false)
   }, [profile])
 
   useRealtime({ tables:['appointments'], onRefresh:fetchAppts, enabled:!!profile })
   useEffect(() => { if (profile) fetchAppts() }, [profile])
 
   const todayStr = new Date().toISOString().split('T')[0]
+  
+  // Group appointments logically
   const upcoming = appts.filter(a=>{
     const apptDate = a.schedule_date?.slice(0,10) || a.schedule_date
-    return apptDate >= todayStr && !['Completed','Cancelled'].includes(a.status)
+    // Future dates that aren't cancelled/completed, OR today that's pending/confirmed
+    return (apptDate > todayStr && !['Completed','Cancelled'].includes(a.status)) ||
+           (apptDate === todayStr && ['Pending','Confirmed'].includes(a.status))
   }).slice(0, 50)
+  
+  const todayCompleted = appts.filter(a=>{
+    const apptDate = a.schedule_date?.slice(0,10) || a.schedule_date
+    return apptDate === todayStr && ['Completed','Cancelled'].includes(a.status)
+  })
+  
   const past = appts.filter(a=>{
     const apptDate = a.schedule_date?.slice(0,10) || a.schedule_date
-    return apptDate < todayStr || ['Completed','Cancelled'].includes(a.status)
+    return apptDate < todayStr // Only truly past dates (yesterday and before)
   }).slice(0, 20)
 
   async function cancelAppt(appt) {
@@ -92,83 +104,98 @@ function MyAppointmentsContent() {
         <div className="space-y-3">
           <h2 className="font-bold text-slate-600 text-sm uppercase tracking-wide">Upcoming ({upcoming.length})</h2>
           {upcoming.map(a=>(
-            <div key={a.appointment_id} className="bg-white rounded-xl border border-slate-100 p-4 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
-              <div className="w-14 h-14 bg-brand-50 rounded-xl flex flex-col items-center justify-center shrink-0 border border-brand-100">
-                <span className="text-lg font-black text-brand-700 leading-none">{new Date(a.schedule_date).getDate()}</span>
-                <span className="text-[10px] font-bold text-brand-400 uppercase">{new Date(a.schedule_date).toLocaleString('en',{month:'short'})}</span>
+            <div key={a.appointment_id} className="bg-white rounded-xl border border-slate-100 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 shadow-sm hover:shadow-md transition-shadow">
+              {/* Date block */}
+              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-brand-50 rounded-xl flex flex-col items-center justify-center shrink-0 border border-brand-100">
+                <span className="text-base sm:text-lg font-black text-brand-700 leading-none">{new Date(a.schedule_date).getDate()}</span>
+                <span className="text-[9px] sm:text-[10px] font-bold text-brand-400 uppercase">{new Date(a.schedule_date).toLocaleString('en',{month:'short'})}</span>
               </div>
+
+              {/* Details */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-slate-800 text-sm">{formatDate(a.schedule_date)}</span>
                   <span className={cn('badge text-xs',APPT_STATUS_COLORS[a.status]||'bg-slate-100')}>{a.status}</span>
-                  {a.status==='Pending' && <span className="text-[10px] text-yellow-600">Awaiting staff confirmation</span>}
+                  {a.status==='Pending' && <span className="text-[10px] text-yellow-600 hidden sm:inline">Awaiting staff confirmation</span>}
                 </div>
-                <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                <div className="flex items-center gap-2 sm:gap-3 mt-1 text-xs text-slate-500 flex-wrap">
                   <span className="flex items-center gap-1"><Clock size={11}/>{formatTime(a.time_slot)}</span>
                   {a.or_number && <span>OR: {a.or_number}</span>}
                   {a.order && <span>Order: <span className="font-mono">{a.order.order_number}</span></span>}
                 </div>
                 {/* Show order items if appointment is linked to an order */}
-                {a.order?.order_items && a.order.order_items.length > 0 && (
+                {a.order?.items && a.order.items.length > 0 && (
                   <div className="mt-2 text-xs text-slate-600">
                     <p className="text-slate-400 mb-1">Items:</p>
                     <div className="flex flex-wrap gap-1">
-                      {a.order.order_items.slice(0, 3).map((item, idx) => (
+                      {a.order.items.slice(0, 3).map((item, idx) => (
                         <span key={idx} className="bg-slate-100 px-2 py-0.5 rounded text-slate-700">
-                          {item.bookstore_items?.name} {item.quantity > 1 && `×${item.quantity}`}
+                          {item.item?.name} {item.quantity > 1 && `×${item.quantity}`}
                         </span>
                       ))}
-                      {a.order.order_items.length > 3 && (
-                        <span className="text-slate-400">+{a.order.order_items.length - 3} more</span>
+                      {a.order.items.length > 3 && (
+                        <span className="text-slate-400">+{a.order.items.length - 3} more</span>
                       )}
                     </div>
                   </div>
                 )}
               </div>
+
+              {/* Cancel button */}
               {a.status==='Pending' && (
-                <button onClick={()=>cancelAppt(a)} className="text-xs text-red-400 hover:text-red-600 shrink-0">Cancel</button>
+                <button onClick={()=>cancelAppt(a)} className="text-xs text-red-400 hover:text-red-600 shrink-0 self-start sm:self-auto py-1 px-2 hover:bg-red-50 rounded-lg transition-colors">Cancel</button>
               )}
             </div>
           ))}
         </div>
       )}
 
-      {/* Past / Completed */}
-      {past.length > 0 && (
+      {/* Today's Completed/Cancelled */}
+      {todayCompleted.length > 0 && (
         <div className="space-y-3">
-          <h2 className="font-bold text-slate-500 text-sm uppercase tracking-wide">Past / Completed</h2>
-          {past.slice(0,5).map(a=>{
+          <h2 className="font-bold text-slate-600 text-sm uppercase tracking-wide">Today</h2>
+          {todayCompleted.map(a=>{
             const orderReleased = isOrderReleasedAppt(a)
             return (
             <div key={a.appointment_id} className={cn(
               "bg-white rounded-xl border p-4 flex flex-col gap-2",
-              orderReleased ? "border-green-200 bg-green-50/50" : "border-slate-100 opacity-60"
+              a.status === 'Completed' ? "border-green-200 bg-green-50/30" : "border-red-200 bg-red-50/30"
+            )}>
+              <div className="flex items-center gap-3 text-sm">
+                <span className="text-slate-500 text-xs w-20">{formatTime(a.time_slot)}</span>
+                <span className={cn('badge text-xs',APPT_STATUS_COLORS[a.status]||'bg-slate-100')}>{a.status}</span>
+                {a.status === 'Completed' && <CheckCircle size={14} className="text-green-500"/>}
+                {a.status === 'Cancelled' && <X size={14} className="text-red-500"/>}
+              </div>
+              {orderReleased ? (
+                <div className="text-xs text-green-600">✅ Your order was claimed. Appointment auto-completed.</div>
+              ) : (
+                <div className="text-xs text-slate-500">{APPT_STATUS_HINTS[a.status]}</div>
+              )}
+            </div>
+          )})}
+        </div>
+      )}
+
+      {/* Past Appointments (before today) */}
+      {past.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="font-bold text-slate-500 text-sm uppercase tracking-wide">History</h2>
+          {past.slice(0,5).map(a=>{
+            const orderReleased = isOrderReleasedAppt(a)
+            return (
+            <div key={a.appointment_id} className={cn(
+              "bg-white rounded-xl border p-4 flex flex-col gap-2 opacity-70",
+              orderReleased ? "border-green-200 bg-green-50/20" : "border-slate-100"
             )}>
               <div className="flex items-center gap-3 text-sm">
                 <span className="text-slate-500 text-xs w-20">{formatDate(a.schedule_date)}</span>
                 <span className={cn('badge text-xs',APPT_STATUS_COLORS[a.status]||'bg-slate-100')}>{a.status}</span>
                 <span className="text-slate-500 text-xs ml-auto">{formatTime(a.time_slot)}</span>
               </div>
-              {/* Special message for order-released appointments */}
-              {orderReleased && (
-                <div className="mt-1 p-3 bg-green-100 border border-green-200 rounded-lg">
-                  <p className="text-sm font-semibold text-green-800 flex items-center gap-2">
-                    <CheckCircle size={14}/> Item already claimed
-                  </p>
-                  <p className="text-xs text-green-700 mt-1">
-                    Your order was released/claimed. This appointment was automatically completed.
-                  </p>
-                  <div className="flex gap-2 mt-3">
-                    <button onClick={()=>setBook(true)} className="btn-primary py-1.5 px-3 text-xs">
-                      <CalendarDays size={12}/> Reschedule
-                    </button>
-                    <button onClick={()=>cancelAppt(a)} className="btn-secondary py-1.5 px-3 text-xs text-red-600 hover:text-red-700">
-                      Cancel Appointment
-                    </button>
-                  </div>
-                </div>
-              )}
-              {!orderReleased && (
+              {orderReleased ? (
+                <div className="text-xs text-green-600">✅ Order claimed</div>
+              ) : (
                 <div className="text-xs text-slate-400">{APPT_STATUS_HINTS[a.status]}</div>
               )}
             </div>
@@ -217,7 +244,7 @@ function BookModal({ onClose, onBooked, preSelectedOrderId }) {
       if (error) console.error('Error loading slots:', error)
       setSlots((data||[]).filter(s=>s.current_bookings<s.max_capacity))
     })
-    supabase.from('orders').select('order_id,order_number,status').eq('user_id',profile.id_number).in('status',['Pending','Ready']).then(({data,error})=>{
+    supabase.from('orders').select('order_id,order_number,status').eq('user_id',profile.user_id).in('status',['Pending','Ready']).then(({data,error})=>{
       if (error) {
         console.error('Error loading orders:', error)
         return
@@ -239,11 +266,41 @@ function BookModal({ onClose, onBooked, preSelectedOrderId }) {
     setLoading(true)
     try {
       const slot = slots.find(s=>s.slot_id===form.slot_id)
+      if (!slot) { throw new Error('Slot not found') }
+      
+      // Check if slot is still available (race condition check)
+      const { data: currentSlot } = await supabase.from('appointment_slots')
+        .select('current_bookings,max_capacity')
+        .eq('slot_id', slot.slot_id)
+        .single()
+      
+      if (!currentSlot) { throw new Error('Slot no longer exists') }
+      if (currentSlot.current_bookings >= currentSlot.max_capacity) {
+        throw new Error('This slot is now full. Please select another time.')
+      }
+      
       const { generateApptNumber } = await import('@/lib/utils')
-      await supabase.from('appointments').insert({ user_id:profile.id_number, order_id:form.order_id||null, schedule_date:slot.slot_date, time_slot:slot.slot_time, status:'Pending', or_number:form.or_number||null, notes:form.notes||null, appt_number:generateApptNumber() })
-      await supabase.from('appointment_slots').update({ current_bookings:slot.current_bookings+1 }).eq('slot_id',slot.slot_id)
+      const { error: insertErr } = await supabase.from('appointments').insert({
+        user_id: profile.user_id,
+        order_id: form.order_id || null,
+        schedule_date: slot.slot_date,
+        time_slot: slot.slot_time,
+        status: 'Pending',
+        or_number: form.or_number || null,
+        notes: form.notes || null,
+        appt_number: generateApptNumber(),
+        purpose: 'OR Presentation & Item Pickup'
+      })
+      if (insertErr) throw insertErr
+      
+      // Increment slot bookings
+      const { error: updateErr } = await supabase.from('appointment_slots').update({
+        current_bookings: currentSlot.current_bookings + 1
+      }).eq('slot_id', slot.slot_id)
+      if (updateErr) throw updateErr
+      
       onBooked()
-    } catch(e) { toast(e.message,'error') } finally { setLoading(false) }
+    } catch(e) { toast(e.message || 'Failed to book appointment', 'error') } finally { setLoading(false) }
   }
 
   const byDate = slots.reduce((acc,s)=>{ if(!acc[s.slot_date])acc[s.slot_date]=[]; acc[s.slot_date].push(s); return acc },{})
